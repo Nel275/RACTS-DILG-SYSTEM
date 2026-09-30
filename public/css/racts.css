@@ -1,0 +1,389 @@
+/*
+ * RACTS design system
+ * ---------------------------------------------------------------
+ * Loaded after the Bootstrap 5.3 CDN stylesheet in layouts/app.blade.php.
+ * Bootstrap 5.3 defines most component colors (buttons, links, focus
+ * rings, list-groups, etc.) as CSS custom properties that fall back to
+ * --bs-primary / --bs-primary-rgb, so re-declaring those two variables
+ * on :root re-themes the existing Bootstrap components across every
+ * page without touching each Blade file individually or adding a
+ * build step. Everything below this is additive: new classes for the
+ * sidebar shell, header, and a few small polish tweaks - no existing
+ * Bootstrap class is redefined in a way that would change layout on
+ * pages that don't use the new sidebar classes.
+ */
+
+:root {
+    /* DILG-referenced palette: blue and red from the seal, kept muted
+       enough for a professional office UI (see PHASE_UI_SETUP.md). */
+    --racts-primary: #0b3d91;
+    --racts-primary-dark: #082c6b;
+    --racts-accent: #ce1126;
+    --racts-accent-soft: rgba(206, 17, 38, 0.14);
+
+    --racts-sidebar-bg: #0d2340;
+    --racts-sidebar-bg-hover: #16335c;
+    --racts-sidebar-text: #adc0dc;
+    --racts-sidebar-text-active: #ffffff;
+    --racts-sidebar-border: rgba(255, 255, 255, 0.08);
+
+    --racts-topbar-bg: #ffffff;
+    --racts-page-bg: #f4f6f9;
+    --racts-radius: 0.6rem;
+
+    /* Re-theme Bootstrap's own components (buttons, links, focus rings,
+       pagination, etc.) to the RACTS primary blue. */
+    --bs-primary: var(--racts-primary);
+    --bs-primary-rgb: 11, 61, 145;
+    --bs-link-color: var(--racts-primary);
+    --bs-link-color-rgb: 11, 61, 145;
+    --bs-link-hover-color: var(--racts-primary-dark);
+    --bs-link-hover-color-rgb: 8, 44, 107;
+}
+
+body {
+    background-color: var(--racts-page-bg);
+}
+
+/* ------------------------------------------------------------------
+   App shell: fixed sidebar + main column
+   ------------------------------------------------------------------ */
+
+.racts-shell {
+    min-height: 100vh;
+}
+
+.racts-sidebar {
+    width: 260px;
+    /* !important is needed here: Bootstrap's offcanvas-lg component resets
+       its own background/border/shadow to transparent once the screen is
+       wide enough that it stops behaving like a drawer and becomes a
+       normal static column (see .offcanvas-lg in Bootstrap's CSS at the
+       lg breakpoint and up). Without this, the dark navy background never
+       renders on desktop/tablet - which is what made the sidebar look
+       washed-out and hard to read. */
+    background-color: var(--racts-sidebar-bg) !important;
+    border-color: var(--racts-sidebar-border) !important;
+    color: var(--racts-sidebar-text);
+    display: flex;
+    flex-direction: column;
+}
+
+.racts-sidebar .offcanvas-header {
+    border-bottom: 1px solid var(--racts-sidebar-border);
+}
+
+/* Brand block */
+.racts-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1.25rem 1rem;
+    text-decoration: none;
+    border-bottom: 1px solid var(--racts-sidebar-border);
+}
+
+.racts-brand img {
+    height: 60px;
+    width: auto;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+.racts-brand-text .racts-brand-title {
+    color: #ffffff;
+    font-weight: 700;
+    font-size: 1.05rem;
+    line-height: 1.2;
+    margin: 0;
+}
+
+.racts-brand-text .racts-brand-subtitle {
+    color: var(--racts-sidebar-text);
+    font-size: 0.55rem;
+    line-height: 1.25;
+    display: block;
+    margin-top: 0.15rem;
+}
+
+/* Nav */
+.racts-sidebar-nav {
+    padding: 0.75rem 0.6rem;
+    flex: 1 1 auto;
+    overflow-y: auto;
+}
+
+.racts-sidebar-nav .nav-link {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    color: var(--racts-sidebar-text);
+    border-radius: var(--racts-radius);
+    padding: 0.55rem 0.75rem;
+    margin-bottom: 0.15rem;
+    font-size: 0.92rem;
+    border-left: 3px solid transparent;
+    transition: background-color 0.15s ease, color 0.15s ease, padding-left 0.15s ease;
+}
+
+.racts-sidebar-nav .nav-link i {
+    font-size: 1.05rem;
+    width: 1.25rem;
+    text-align: center;
+    flex-shrink: 0;
+    transition: transform 0.15s ease;
+}
+
+.racts-sidebar-nav .nav-link:hover,
+.racts-sidebar-nav .nav-link:focus {
+    background-color: var(--racts-sidebar-bg-hover);
+    color: var(--racts-sidebar-text-active);
+    padding-left: 0.95rem;
+}
+
+.racts-sidebar-nav .nav-link:hover i {
+    transform: translateX(2px);
+}
+
+.racts-sidebar-nav .nav-link.active {
+    background-color: var(--racts-accent-soft);
+    color: var(--racts-sidebar-text-active);
+    border-left-color: var(--racts-accent);
+    font-weight: 600;
+}
+
+.racts-sidebar-nav .nav-link.active i {
+    color: var(--racts-accent);
+}
+
+.racts-sidebar-nav .nav-badge {
+    margin-left: auto;
+}
+
+.racts-sidebar-footer {
+    padding: 0.85rem 1rem;
+    border-top: 1px solid var(--racts-sidebar-border);
+    font-size: 0.72rem;
+    color: var(--racts-sidebar-text);
+}
+
+/* ------------------------------------------------------------------
+   Main column: topbar + content
+   ------------------------------------------------------------------ */
+
+.racts-main {
+    min-width: 0; /* allow flex child to shrink instead of overflowing */
+}
+
+.racts-topbar {
+    background-color: var(--racts-topbar-bg);
+    border-bottom: 1px solid #e3e7ed;
+    padding: 0.65rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.racts-topbar-title h1 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin: 0;
+    color: #1c2a3a;
+}
+
+.racts-breadcrumb {
+    font-size: 0.78rem;
+    color: #7a8699;
+    margin: 0;
+}
+
+.racts-breadcrumb .active {
+    color: #495566;
+    font-weight: 600;
+}
+
+.racts-sidebar-toggle {
+    color: #1c2a3a;
+    border: 1px solid #dde3ec;
+}
+
+/* Notification bell */
+.racts-bell {
+    position: relative;
+    color: #495566;
+    font-size: 1.2rem;
+    width: 2.3rem;
+    height: 2.3rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background-color 0.15s ease;
+}
+
+.racts-bell:hover {
+    background-color: #f0f2f6;
+    color: var(--racts-primary);
+}
+
+.racts-bell .badge {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    font-size: 0.62rem;
+    padding: 0.25em 0.4em;
+}
+
+/* User menu */
+.racts-user-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    border: none;
+    background: transparent;
+    padding: 0.3rem 0.5rem;
+    border-radius: var(--racts-radius);
+}
+
+.racts-user-toggle:hover {
+    background-color: #f0f2f6;
+}
+
+.racts-avatar {
+    width: 2.1rem;
+    height: 2.1rem;
+    border-radius: 50%;
+    background-color: var(--racts-primary);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+}
+
+.racts-user-name {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #1c2a3a;
+    line-height: 1.1;
+}
+
+.racts-user-role {
+    font-size: 0.72rem;
+    color: #7a8699;
+    line-height: 1.1;
+}
+
+.racts-content {
+    padding: 1.5rem;
+}
+
+/* ------------------------------------------------------------------
+   Small consistency polish applied to existing Bootstrap components
+   (cards, tables, badges) already used throughout the app.
+   ------------------------------------------------------------------ */
+
+.card {
+    border: 1px solid #e9ecf2;
+    border-radius: var(--racts-radius);
+}
+
+.table thead th {
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #6c7789;
+}
+
+.btn {
+    border-radius: 0.45rem;
+}
+
+.racts-empty-state {
+    text-align: center;
+    color: #8a94a3;
+    padding: 2.5rem 1rem;
+}
+
+.racts-empty-state i {
+    font-size: 1.8rem;
+    display: block;
+    margin-bottom: 0.5rem;
+    color: #c3cad6;
+}
+
+.app-footer {
+    padding: 1rem 1.5rem;
+    color: #6c757d;
+    font-size: 0.8rem;
+}
+
+@media (max-width: 991.98px) {
+    .racts-content {
+        padding: 1.1rem;
+    }
+}
+
+/* ------------------------------------------------------------------
+   Barangay Reports / SK Reports grid (redesign Phase 2). Rows are
+   barangays, columns are report slots - potentially a lot of columns,
+   so the barangay name column stays pinned while the rest scrolls
+   horizontally inside .table-responsive.
+   ------------------------------------------------------------------ */
+
+.racts-grid-table {
+    min-width: 100%;
+}
+
+.racts-grid-table th,
+.racts-grid-table td {
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.racts-grid-sticky-col {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background-color: #fff;
+    box-shadow: 1px 0 0 #dee2e6;
+}
+
+.racts-grid-table thead .racts-grid-sticky-col {
+    z-index: 3;
+    background-color: #f8f9fa;
+}
+
+/* Color-select tints itself to match the currently chosen grade, so a
+   filled-in row is scannable at a glance without opening every select. */
+.racts-color-select.racts-color-green {
+    background-color: #d1f3dd;
+    border-color: #75c795;
+}
+
+.racts-color-select.racts-color-yellow {
+    background-color: #fff3cd;
+    border-color: #e6c34d;
+}
+
+.racts-color-select.racts-color-red {
+    background-color: #f8d7da;
+    border-color: #e08792;
+}
+
+.racts-badge-green {
+    background-color: #2e9e5b;
+    color: #fff;
+}
+
+.racts-badge-yellow {
+    background-color: #e6b800;
+    color: #2b2200;
+}
+
+.racts-badge-red {
+    background-color: #d9534f;
+    color: #fff;
+}
