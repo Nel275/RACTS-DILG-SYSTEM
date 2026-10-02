@@ -222,6 +222,13 @@ class BarangayLogDetailController extends Controller
             $reportOriginalName
         );
 
+        // File the uploaded report straight into the barangay's own folder
+        // (barangays/{Name}/Barangay or barangays/{Name}/SK) right away,
+        // instead of leaving it staged until someone clicks "Download".
+        if ($reportFilePath !== null) {
+            $barangayLogDetail->refresh()->fileIntoBarangayFolder($request->user()->name);
+        }
+
         AuditLog::record($request->user(), sprintf(
             'Recorded submission for "%s" (%s) - %s.',
             $barangayLogDetail->item_description,
@@ -230,7 +237,11 @@ class BarangayLogDetailController extends Controller
         ));
 
         return redirect()->route('barangay-log-details.show', $barangayLogDetail)
-            ->with('success', 'Submission recorded.');
+            ->with('success', $reportFilePath !== null
+                ? sprintf('Submission recorded and report filed into %s\'s %s folder.',
+                    $barangayLogDetail->barangay->barangay_name,
+                    $barangayLogDetail->councilFolder())
+                : 'Submission recorded.');
     }
 
     /**
