@@ -4,10 +4,11 @@ namespace App\Providers;
 
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
-class AppServiceProvider extends ServiceProvider
+class AppServiceProvider extends ServiceProvider{}
 {
     /**
      * Register any application services.
@@ -22,6 +23,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Railway serves the site over HTTPS - make every generated URL
+        // (form actions, redirects, assets) use https:// in production.
+        if (app()->environment('production')) {
+            URL::forceScheme('https');
+        }
+
         // Laravel's default pagination views use Tailwind CSS classes.
         // RACTS uses Bootstrap only, so render pagination links with
         // Bootstrap 5 markup instead.

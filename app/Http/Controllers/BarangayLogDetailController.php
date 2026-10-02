@@ -209,7 +209,7 @@ class BarangayLogDetailController extends Controller
             // Staged, not filed yet - "Download" (fileIntoBarangayFolder)
             // is what moves this into the barangay's actual folder.
             $reportFilePath = $request->file('report_file')->store(
-                'incoming-reports/'.$barangayLogDetail->id,
+                $barangayLogDetail->incomingFolder(),
                 'local'
             );
             $reportOriginalName = $request->file('report_file')->getClientOriginalName();

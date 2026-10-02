@@ -158,11 +158,35 @@ class Barangay extends Model
             && ! Storage::disk('local')->exists($target)
         ) {
             $this->moveFolder($legacy, $target);
-
-            return;
         }
 
         Storage::disk('local')->makeDirectory($target);
+        $this->ensureCouncilFolders();
+    }
+
+    /**
+     * Creates the per-council subfolders for this barangay, so every
+     * barangay gets named folders for both Barangay and SK reports:
+     *   barangays/{Name}/Barangay, barangays/{Name}/SK      (filed)
+     *   incoming-reports/Barangay/{Name}, incoming-reports/SK/{Name} (uploaded, not yet filed)
+     */
+    public function ensureCouncilFolders(): void
+    {
+        $disk = Storage::disk('local');
+
+        foreach (ReportRequirement::COUNCIL_TYPES as $councilLabel) {
+            $disk->makeDirectory($this->storagePath().'/'.$councilLabel);
+            $disk->makeDirectory(static::incomingPath($councilLabel, $this->folderName()));
+        }
+    }
+
+    /**
+     * Where uploaded-but-not-yet-filed reports are staged for a council
+     * and barangay, e.g. incoming-reports/SK/Centro West.
+     */
+    public static function incomingPath(string $councilLabel, string $folderName): string
+    {
+        return 'incoming-reports/'.$councilLabel.'/'.$folderName;
     }
 
     /**
@@ -174,7 +198,10 @@ class Barangay extends Model
      */
     public function moveFolderForRename(string $previousName): void
     {
-        $oldPath = 'barangays/'.(static::sanitizeFolderName($previousName) ?: ('barangay-'.$this->id));
+        $oldFolderName = static::sanitizeFolderName($previousName) ?: ('barangay-'.$this->id);
+        $this->moveIncomingFoldersForRename($oldFolderName);
+
+        $oldPath = 'barangays/'.$oldFolderName;
         $newPath = $this->storagePath();
 
         if ($oldPath === $newPath) {
@@ -198,6 +225,36 @@ class Barangay extends Model
                     'report_file_path' => Str::replaceFirst($oldPath.'/', $newPath.'/', $entry->report_file_path),
                 ]);
             });
+    }
+
+    /**
+     * Renames this barangay's staging folders (incoming-reports/{Council}/{Name})
+     * after a rename and rewrites the stored path of every report still
+     * staged there, so uploads that haven't been filed yet keep working.
+     */
+    private function moveIncomingFoldersForRename(string $oldFolderName): void
+    {
+        foreach (ReportRequirement::COUNCIL_TYPES as $councilLabel) {
+            $oldPath = static::incomingPath($councilLabel, $oldFolderName);
+            $newPath = static::incomingPath($councilLabel, $this->folderName());
+
+            if ($oldPath === $newPath) {
+                continue;
+            }
+
+            if (Storage::disk('local')->exists($oldPath)) {
+                $this->moveFolder($oldPath, $newPath);
+            }
+
+            $this->logDetails()
+                ->where('report_file_path', 'like', $oldPath.'/%')
+                ->get()
+                ->each(function (BarangayLogDetail $entry) use ($oldPath, $newPath) {
+                    $entry->update([
+                        'report_file_path' => Str::replaceFirst($oldPath.'/', $newPath.'/', $entry->report_file_path),
+                    ]);
+                });
+        }
     }
 
     /**

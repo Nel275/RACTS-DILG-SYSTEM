@@ -171,7 +171,7 @@ class BarangayLogDetail extends Model
         $this->barangay->ensureFolder();
 
         $safeName = $this->id.'-'.($this->report_original_name ?? basename($this->report_file_path));
-        $destination = $this->barangay->storagePath().'/'.$safeName;
+        $destination = $this->barangay->storagePath().'/'.$this->councilFolder().'/'.$safeName;
 
         Storage::disk('local')->move($this->report_file_path, $destination);
 
@@ -181,6 +181,25 @@ class BarangayLogDetail extends Model
             'date_process' => now(),
             'processed_by' => $processedBy,
         ]);
+    }
+
+    /**
+     * "Barangay" or "SK" - which council this entry's report belongs to,
+     * used as the subfolder name for its file.
+     */
+    public function councilFolder(): string
+    {
+        return ReportRequirement::COUNCIL_TYPES[$this->barangayLog?->council_type ?? ReportRequirement::COUNCIL_BARANGAY]
+            ?? ReportRequirement::COUNCIL_TYPES[ReportRequirement::COUNCIL_BARANGAY];
+    }
+
+    /**
+     * Staging folder for this entry's upload, named after the council and
+     * barangay (e.g. incoming-reports/SK/Centro West) instead of the entry id.
+     */
+    public function incomingFolder(): string
+    {
+        return Barangay::incomingPath($this->councilFolder(), $this->barangay->folderName());
     }
 
     public function close(string $processedBy): void
