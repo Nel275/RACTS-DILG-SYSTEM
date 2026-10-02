@@ -9,6 +9,7 @@ use App\Http\Controllers\BarangayLogDetailController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\RecordsController;
+use App\Http\Controllers\FileSyncController;
 use App\Http\Controllers\ReportGridController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserLogController;
@@ -30,6 +31,15 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return redirect()->route(auth()->check() ? 'dashboard' : 'login');
+});
+
+// File sync for the office laptop (php artisan racts:sync-from-live).
+// No login session - protected by the X-Sync-Token header instead
+// (see FileSyncController). Read-only: only lists and serves files
+// under barangays/.
+Route::prefix('sync')->name('sync.')->group(function () {
+    Route::get('/manifest', [FileSyncController::class, 'manifest'])->name('manifest');
+    Route::get('/file', [FileSyncController::class, 'file'])->name('file');
 });
 
 // Guest-only routes (already logged in users are redirected away from these)

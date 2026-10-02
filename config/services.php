@@ -28,6 +28,15 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    // RACTS file sync: lets the office laptop copy the live site's
+    // barangay folders/files down (php artisan racts:sync-from-live).
+    // SYNC_TOKEN must be the same long random value on Railway and in
+    // the laptop's .env. SYNC_URL is only needed on the laptop.
+    'racts_sync' => [
+        'token' => env('SYNC_TOKEN'),
+        'url' => env('SYNC_URL'),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
