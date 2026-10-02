@@ -15,7 +15,10 @@
                             <label for="barangay_name" class="form-label">Barangay Name</label>
                             <input type="text" name="barangay_name" id="barangay_name"
                                    value="{{ old('barangay_name', $barangay->barangay_name) }}"
-                                   class="form-control @error('barangay_name') is-invalid @enderror" required>
+                                   class="form-control @error('barangay_name') is-invalid @enderror" required maxlength="255"
+                                   pattern="[\p{L} .\-]+" title="Letters, spaces, periods and hyphens only"
+                                   oninput="this.value = this.value.replace(/[^\p{L} .\-]/gu, '')">
+                            <div class="form-text">Letters, spaces, periods (.) and hyphens (-) only, e.g. Sto. Niño.</div>
                             @error('barangay_name')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror

@@ -171,12 +171,23 @@ class BarangayController extends Controller
      */
     private function validateBarangay(Request $request, ?Barangay $barangay = null): array
     {
+        // Trim and collapse repeated spaces first, so "  Centro   West " is
+        // checked (and saved) as "Centro West".
+        $request->merge([
+            'barangay_name' => trim(preg_replace('/\s+/u', ' ', (string) $request->input('barangay_name'))),
+        ]);
+
         return $request->validate([
             'barangay_name' => [
                 'required', 'string', 'max:255',
+                // Letters (including Ñ and other accented letters), spaces,
+                // periods and hyphens only - and at least one letter.
+                'regex:/^(?=.*\pL)[\pL .\-]+$/u',
                 Rule::unique('barangays', 'barangay_name')->ignore($barangay?->id),
             ],
             'status' => ['required', Rule::in(array_keys(Barangay::STATUSES))],
+        ], [
+            'barangay_name.regex' => 'The barangay name may only contain letters, spaces, periods (.) and hyphens (-).',
         ]);
     }
 }
