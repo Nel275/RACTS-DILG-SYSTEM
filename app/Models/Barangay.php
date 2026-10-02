@@ -32,12 +32,17 @@ class Barangay extends Model
     ];
 
     /**
+     * Follow-up round: pinned to 'date:Y-m-d' instead of plain 'date' -
+     * see BarangayLogDetail's matching doc comment for why (MySQL's
+     * DATE column silently truncates the difference away; a SQLite
+     * test database doesn't).
+     *
      * @return array<string, string>
      */
     protected function casts(): array
     {
         return [
-            'date_process' => 'date',
+            'date_process' => 'date:Y-m-d',
         ];
     }
 

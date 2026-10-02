@@ -118,6 +118,12 @@ Route::middleware('auth')->group(function () {
             ->middleware('role:admin')->name('update');
         Route::patch('/{barangayLog}/toggle', [BarangayLogController::class, 'toggle'])
             ->middleware('role:admin')->name('toggle');
+
+        // Follow-up round: clicking a report in the Report Filing list
+        // now lands here instead of a single barangay's entry - this
+        // page lists every barangay logged against this one report.
+        Route::get('/{barangayLog}', [BarangayLogController::class, 'show'])
+            ->middleware('role:admin,staff')->name('show');
     });
 
     Route::prefix('barangay-log-details')->name('barangay-log-details.')->group(function () {
@@ -127,6 +133,14 @@ Route::middleware('auth')->group(function () {
             ->middleware('role:admin')->name('store');
         Route::patch('/{barangayLogDetail}/submit', [BarangayLogDetailController::class, 'markSubmitted'])
             ->middleware('role:admin,staff')->name('submit');
+
+        // Follow-up round: opens/downloads the attached file itself
+        // (whatever report_file_path currently points to - staged or
+        // already filed, either way), separate from Download below,
+        // which moves the file into the barangay's folder rather than
+        // showing it.
+        Route::get('/{barangayLogDetail}/view-file', [BarangayLogDetailController::class, 'viewFile'])
+            ->middleware('role:admin,staff')->name('view-file');
 
         // Follow-up round: replaces the old View/Delete row actions.
         // Download files the uploaded report into the barangay's own
@@ -145,6 +159,23 @@ Route::middleware('auth')->group(function () {
         // Registered last so it doesn't swallow the routes above.
         Route::get('/{barangayLogDetail}', [BarangayLogDetailController::class, 'show'])
             ->middleware('role:admin,staff')->name('show');
+    });
+
+    // Follow-up round: Report Filing for the SK council - same feature
+    // as barangay-log-details above, just scoped to SK via
+    // BarangayLog::council_type (see that model's doc comment). Only
+    // the list and "Add Log Entry" need their own routes here, since
+    // they're the only two actions that have to be told which council
+    // they're working with; every other action on an individual entry
+    // (view/submit/download/close/destroy/show) stays under
+    // barangay-log-details above - an entry's own id already carries
+    // that information via its barangayLog relation, so a second set
+    // of routes for those would have nothing to add.
+    Route::prefix('sk-log-details')->name('sk-log-details.')->group(function () {
+        Route::get('/', [BarangayLogDetailController::class, 'indexSk'])
+            ->middleware('role:admin,staff')->name('index');
+        Route::post('/', [BarangayLogDetailController::class, 'storeSk'])
+            ->middleware('role:admin')->name('store');
     });
 
     // Follow-up round: User Logs - a barangay personnel/officials

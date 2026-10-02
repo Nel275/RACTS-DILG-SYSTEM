@@ -70,7 +70,7 @@
     </div>
 
     <div class="card shadow-sm">
-        <div class="table-responsive">
+        <div class="table-responsive racts-table-no-clip">
             <table class="table table-hover align-middle mb-0">
                 <thead class="table-light">
                     <tr>
@@ -92,7 +92,7 @@
                             </td>
                             <td class="text-end">
                                 <div class="dropdown">
-                                    <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown" data-bs-display="static" aria-expanded="false">
                                         <i class="bi bi-three-dots-vertical"></i>
                                     </button>
                                     <ul class="dropdown-menu dropdown-menu-end">

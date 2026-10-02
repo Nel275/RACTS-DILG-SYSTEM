@@ -73,14 +73,25 @@ class BarangayLogDetail extends Model
     ];
 
     /**
+     * Follow-up round: 'date' (with no explicit format) saves using the
+     * connection's full datetime format ('Y-m-d H:i:s'), not just
+     * 'Y-m-d' - MySQL's DATE column type quietly truncates the time
+     * back off on insert, so this never showed up against it, but a
+     * SQLite test database has no such column-type enforcement and
+     * stores the string exactly as given, which broke
+     * assertDatabaseHas() checks on deadline_date in BarangayLogsTest.
+     * 'date:Y-m-d' pins the storage format explicitly so it's
+     * consistent on every database, not just ones that happen to paper
+     * over it.
+     *
      * @return array<string, string>
      */
     protected function casts(): array
     {
         return [
-            'deadline_date' => 'date',
+            'deadline_date' => 'date:Y-m-d',
             'date_submitted' => 'datetime',
-            'date_process' => 'date',
+            'date_process' => 'date:Y-m-d',
             'report_filed_at' => 'datetime',
         ];
     }

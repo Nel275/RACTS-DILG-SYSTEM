@@ -54,7 +54,7 @@
         <div class="col-md-6">
             <div class="card shadow-sm h-100">
                 <div class="card-body">
-                    <h2 class="h6 mb-3"><i class="bi bi-hourglass-split text-info"></i> Barangay Current-Cycle Progress &mdash; {{ $currentPeriodLabel }}</h2>
+                    <h2 class="h6 mb-3"><i class="bi bi-hourglass-split text-secondary"></i> Barangay Current-Cycle Progress &mdash; {{ $currentPeriodLabel }}</h2>
                     @include('dashboard._cycle-progress', ['progress' => $barangayProgress])
                 </div>
             </div>
@@ -62,7 +62,7 @@
         <div class="col-md-6">
             <div class="card shadow-sm h-100">
                 <div class="card-body">
-                    <h2 class="h6 mb-3"><i class="bi bi-hourglass-split text-info"></i> SK Current-Cycle Progress &mdash; {{ $currentPeriodLabel }}</h2>
+                    <h2 class="h6 mb-3"><i class="bi bi-hourglass-split text-secondary"></i> SK Current-Cycle Progress &mdash; {{ $currentPeriodLabel }}</h2>
                     @include('dashboard._cycle-progress', ['progress' => $skProgress])
                 </div>
             </div>
@@ -75,7 +75,7 @@
             <div class="card shadow-sm h-100">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h2 class="h6 mb-0"><i class="bi bi-trophy text-warning"></i> Top Barangay Councils (Year to Date)</h2>
+                        <h2 class="h6 mb-0"><i class="bi bi-trophy text-secondary"></i> Top Barangay Councils (Year to Date)</h2>
                         <a href="{{ route('barangay-reports.index') }}" class="small">Open grid &rarr;</a>
                     </div>
                     @forelse ($barangayRanking as $row)
@@ -101,7 +101,7 @@
             <div class="card shadow-sm h-100">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h2 class="h6 mb-0"><i class="bi bi-trophy text-warning"></i> Top SK Councils (Year to Date)</h2>
+                        <h2 class="h6 mb-0"><i class="bi bi-trophy text-secondary"></i> Top SK Councils (Year to Date)</h2>
                         <a href="{{ route('sk-reports.index') }}" class="small">Open grid &rarr;</a>
                     </div>
                     @forelse ($skRanking as $row)

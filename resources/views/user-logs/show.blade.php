@@ -38,6 +38,16 @@
                         by {{ $userLog->processed_by }}
                     @endif
                 </dd>
+
+                <dt class="col-sm-3">Login Account</dt>
+                <dd class="col-sm-9">
+                    @if ($userLog->hasLoginAccount())
+                        <span class="badge bg-info-subtle text-info-emphasis">{{ $userLog->account->username }}</span>
+                        &mdash; {{ $userLog->account->roleLabel() }}
+                    @else
+                        <span class="text-muted">No login account</span>
+                    @endif
+                </dd>
             </dl>
 
             @if (auth()->user()->isAdmin())

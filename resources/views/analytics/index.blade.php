@@ -98,8 +98,8 @@
                     datasets: [{
                         label: 'Compliance %',
                         data: data,
-                        backgroundColor: '#2e5aac',
-                        borderRadius: 4,
+                        backgroundColor: '#0b3d91',
+                        borderRadius: 2,
                     }],
                 },
                 options: {
@@ -123,8 +123,8 @@
                     datasets: [{
                         label: 'Average Compliance %',
                         data: data,
-                        borderColor: '#2e5aac',
-                        backgroundColor: 'rgba(46, 90, 172, 0.15)',
+                        borderColor: '#0b3d91',
+                        backgroundColor: 'rgba(11, 61, 145, 0.12)',
                         tension: 0.25,
                         spanGaps: false,
                         fill: true,

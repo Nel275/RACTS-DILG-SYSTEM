@@ -42,7 +42,9 @@
             // Pattern matches both routes so the sidebar stays highlighted
             // on the new Log Details tab too - see report-grid/_reports-tabs.blade.php.
             ['label' => 'Barangay Reports', 'icon' => 'bi-grid-3x3-gap-fill', 'route' => 'barangay-reports.index', 'pattern' => ['barangay-reports.*', 'barangay-log-details.*']],
-            ['label' => 'SK Reports', 'icon' => 'bi-grid-3x3-gap', 'route' => 'sk-reports.index', 'pattern' => 'sk-reports.*'],
+            // Follow-up round: Report Filing now has an SK side too
+            // (sk-log-details.*), same pattern as Barangay Reports above.
+            ['label' => 'SK Reports', 'icon' => 'bi-grid-3x3-gap', 'route' => 'sk-reports.index', 'pattern' => ['sk-reports.*', 'sk-log-details.*']],
             ['label' => 'Records', 'icon' => 'bi-journal-text', 'route' => 'records.index', 'pattern' => 'records.*'],
             ['label' => 'Analytics & Ranking', 'icon' => 'bi-graph-up', 'route' => 'analytics.index', 'pattern' => 'analytics.*'],
             ['label' => 'Notifications', 'icon' => 'bi-bell-fill', 'route' => 'notifications.index', 'pattern' => 'notifications.*', 'badge' => true],

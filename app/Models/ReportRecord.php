@@ -55,7 +55,11 @@ class ReportRecord extends Model
     protected function casts(): array
     {
         return [
-            'submission_date' => 'date',
+            // Follow-up round: pinned to 'date:Y-m-d' instead of plain
+            // 'date' - see BarangayLogDetail's matching doc comment for
+            // why (MySQL's DATE column silently truncates the
+            // difference away; a SQLite test database doesn't).
+            'submission_date' => 'date:Y-m-d',
             'edited_at' => 'datetime',
         ];
     }

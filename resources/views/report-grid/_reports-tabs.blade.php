@@ -1,10 +1,12 @@
 {{--
     Shared tab bar for the Barangay Reports page and the Report Filing
-    page. Two real pages (RACTS doesn't use AJAX, so every page is a
-    full server-rendered response - see _grid.blade.php's own comment
-    on this), not one page hiding/showing content client-side, but
-    styled and laid out as a single set of tabs so they read as one
-    "Barangay Reports" section with two views, per what was asked for.
+    page - and, follow-up round, for their SK equivalents too, now that
+    Report Filing isn't Barangay-only any more. Two real pages (RACTS
+    doesn't use AJAX, so every page is a full server-rendered response -
+    see _grid.blade.php's own comment on this), not one page
+    hiding/showing content client-side, but styled and laid out as a
+    single set of tabs so they read as one "Barangay Reports" (or "SK
+    Reports") section with two views, per what was asked for.
 
     Follow-up round: relabeled "Log Details" -> "Report Filing" and
     added the one-line explainer below, so it's clear at a glance that
@@ -13,15 +15,24 @@
     the grid - the actual source of confusion this round addresses.
 
     $active: 'grid' or 'log-details'.
+    $councilType: \App\Models\ReportRequirement::COUNCIL_BARANGAY or
+    ::COUNCIL_SK - picks which council's two pages these tabs link to.
+    Defaults to Barangay so any older include left without it keeps
+    working exactly as before.
 --}}
+@php
+    $isSk = ($councilType ?? \App\Models\ReportRequirement::COUNCIL_BARANGAY) === \App\Models\ReportRequirement::COUNCIL_SK;
+    $gridRouteName = $isSk ? 'sk-reports.index' : 'barangay-reports.index';
+    $filingRouteName = $isSk ? 'sk-log-details.index' : 'barangay-log-details.index';
+@endphp
 <ul class="nav nav-tabs mb-2" role="tablist">
     <li class="nav-item" role="presentation">
-        <a class="nav-link {{ $active === 'grid' ? 'active' : '' }}" href="{{ route('barangay-reports.index') }}">
+        <a class="nav-link {{ $active === 'grid' ? 'active' : '' }}" href="{{ route($gridRouteName) }}">
             <i class="bi bi-grid-3x3-gap-fill"></i> Compliance Grid
         </a>
     </li>
     <li class="nav-item" role="presentation">
-        <a class="nav-link {{ $active === 'log-details' ? 'active' : '' }}" href="{{ route('barangay-log-details.index') }}">
+        <a class="nav-link {{ $active === 'log-details' ? 'active' : '' }}" href="{{ route($filingRouteName) }}">
             <i class="bi bi-journal-check"></i> Report Filing
         </a>
     </li>

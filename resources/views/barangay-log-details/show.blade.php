@@ -3,7 +3,17 @@
 @section('title', 'Log Entry Details')
 
 @section('content')
-    <a href="{{ route('barangay-log-details.index') }}" class="d-inline-block mb-3">&larr; Back to Report Filing</a>
+    {{--
+        Follow-up round: Report Filing now covers both councils, so
+        this entry could belong to either one (see
+        BarangayLog::council_type) - the back link has to be resolved
+        from the entry's own barangayLog relation rather than always
+        pointing at the Barangay list.
+    --}}
+    @php
+        $isSk = $entry->barangayLog->council_type === \App\Models\ReportRequirement::COUNCIL_SK;
+    @endphp
+    <a href="{{ route($isSk ? 'sk-log-details.index' : 'barangay-log-details.index') }}" class="d-inline-block mb-3">&larr; Back to Report Filing</a>
 
     <div class="card shadow-sm mb-3">
         <div class="card-body">
@@ -39,11 +49,13 @@
                 <dt class="col-sm-3">Report File</dt>
                 <dd class="col-sm-9">
                     @if ($entry->hasReportFile())
-                        {{ $entry->report_original_name ?? 'Uploaded file' }}
+                        <a href="{{ route('barangay-log-details.view-file', $entry) }}" target="_blank" rel="noopener">
+                            {{ $entry->report_original_name ?? 'Uploaded file' }}
+                        </a>
                         @if ($entry->isFiled())
                             <span class="badge bg-dark-subtle text-dark-emphasis ms-1">Filed to {{ $entry->barangay->barangay_name }}'s folder</span>
                         @else
-                            <span class="badge bg-warning-subtle text-warning-emphasis ms-1">Not yet filed - use Download below</span>
+                            <span class="badge bg-warning-subtle text-warning-emphasis ms-1">Not yet filed - use Attach below</span>
                         @endif
                     @else
                         <span class="text-muted">No file attached yet.</span>
@@ -58,7 +70,7 @@
                         @csrf
                         @method('PATCH')
                         <button type="submit" class="btn btn-outline-primary btn-sm">
-                            <i class="bi bi-download"></i> Download
+                            <i class="bi bi-paperclip"></i> Attach
                         </button>
                     </form>
                 @endif

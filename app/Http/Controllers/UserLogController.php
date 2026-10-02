@@ -4,18 +4,21 @@ namespace App\Http\Controllers;
 
 use App\Models\AuditLog;
 use App\Models\Barangay;
+use App\Models\User;
 use App\Models\UserLog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 /**
  * Follow-up round: User Logs - a barangay's personnel/officials roster
- * (client's reference table `userslogs`). Not related to real login
- * accounts - see UserLog's own doc comment. Both roles can view; only
- * the administrator can add, edit, or delete entries, matching every
- * other management page in RACTS.
+ * (client's reference table `userslogs`). Both roles can view; only the
+ * administrator can add, edit, or delete entries, matching every other
+ * management page in RACTS. A personnel record can optionally be given a
+ * real RACTS login account (DILG Administrator or DILG Monitoring Staff
+ * role only) - see UserLog's own doc comment for how that link works.
  */
 class UserLogController extends Controller
 {
@@ -65,22 +68,42 @@ class UserLogController extends Controller
         $validated['processed_by'] = $request->user()->name;
         $validated['status'] = $validated['status'] ?? UserLog::STATUS_ACTIVE;
 
-        $log = UserLog::create($validated);
+        $createAccount = $request->boolean('create_account');
+        $accountData = $createAccount ? $this->validateAccount($request) : null;
 
-        AuditLog::record($request->user(), sprintf('Added user log "%s".', $log->fullName()));
+        $log = DB::transaction(function () use ($validated, $accountData) {
+            if ($accountData) {
+                $account = User::create([
+                    'name' => trim(sprintf('%s %s', $validated['first_name'], $validated['last_name'])),
+                    'username' => $accountData['username'],
+                    'password' => $accountData['password'],
+                    'role' => $accountData['account_role'],
+                ]);
+
+                $validated['user_id'] = $account->id;
+            }
+
+            return UserLog::create($validated);
+        });
+
+        $message = $accountData
+            ? sprintf('Added user log "%s" with a login account.', $log->fullName())
+            : sprintf('Added user log "%s".', $log->fullName());
+        AuditLog::record($request->user(), $message);
 
         return redirect()->route('user-logs.index')->with('success', 'Personnel record added.');
     }
 
     public function show(UserLog $userLog): View
     {
-        $userLog->load('barangay');
+        $userLog->load('barangay', 'account');
 
         return view('user-logs.show', compact('userLog'));
     }
 
     public function edit(UserLog $userLog): View
     {
+        $userLog->load('account');
         $barangayOptions = Barangay::where('status', Barangay::STATUS_ACTIVE)->orderBy('barangay_name')->get();
 
         return view('user-logs.edit', compact('userLog', 'barangayOptions'));
@@ -92,7 +115,41 @@ class UserLogController extends Controller
         $validated['date_process'] = now();
         $validated['processed_by'] = $request->user()->name;
 
-        $userLog->update($validated);
+        $hadAccount = $userLog->hasLoginAccount();
+        $willCreateAccount = ! $hadAccount && $request->boolean('create_account');
+
+        $accountData = null;
+        if ($hadAccount) {
+            // Already linked: account fields are always editable, but a
+            // blank password means "keep the current one" - only
+            // required when they're setting one for the first time.
+            $accountData = $this->validateAccount($request, $userLog->account, passwordRequired: false);
+        } elseif ($willCreateAccount) {
+            $accountData = $this->validateAccount($request);
+        }
+
+        DB::transaction(function () use ($userLog, $validated, $accountData, $hadAccount, $willCreateAccount) {
+            if ($hadAccount && $accountData) {
+                $accountUpdate = [
+                    'username' => $accountData['username'],
+                    'role' => $accountData['account_role'],
+                ];
+                if (! empty($accountData['password'])) {
+                    $accountUpdate['password'] = $accountData['password'];
+                }
+                $userLog->account->update($accountUpdate);
+            } elseif ($willCreateAccount && $accountData) {
+                $account = User::create([
+                    'name' => trim(sprintf('%s %s', $validated['first_name'], $validated['last_name'])),
+                    'username' => $accountData['username'],
+                    'password' => $accountData['password'],
+                    'role' => $accountData['account_role'],
+                ]);
+                $validated['user_id'] = $account->id;
+            }
+
+            $userLog->update($validated);
+        });
 
         AuditLog::record($request->user(), sprintf('Updated user log "%s".', $userLog->fullName()));
 
@@ -101,6 +158,11 @@ class UserLogController extends Controller
 
     public function destroy(Request $request, UserLog $userLog): RedirectResponse
     {
+        if ($userLog->hasLoginAccount()) {
+            return redirect()->route('user-logs.index')
+                ->with('error', 'Can\'t delete "'.$userLog->fullName().'" - they have a login account. Remove the account from Users first, or set this record to Inactive instead.');
+        }
+
         $name = $userLog->fullName();
 
         $userLog->delete();
@@ -122,6 +184,25 @@ class UserLogController extends Controller
             'roles' => ['required', 'string', 'max:150'],
             'status' => ['nullable', Rule::in(array_keys(UserLog::STATUSES))],
             'barangay_id' => ['nullable', 'exists:barangays,id'],
+        ]);
+    }
+
+    /**
+     * Validates the Login Account fields on the User Logs form. Role is
+     * restricted to DILG Administrator / DILG Monitoring Staff only -
+     * there's no third option for a barangay personnel account.
+     */
+    private function validateAccount(Request $request, ?User $existingUser = null, bool $passwordRequired = true): array
+    {
+        return $request->validate([
+            'username' => [
+                'required', 'string', 'max:255',
+                Rule::unique('users', 'username')->ignore($existingUser?->id),
+            ],
+            'password' => $passwordRequired
+                ? ['required', 'string', 'min:8', 'confirmed']
+                : ['nullable', 'string', 'min:8', 'confirmed'],
+            'account_role' => ['required', Rule::in([User::ROLE_ADMIN, User::ROLE_STAFF])],
         ]);
     }
 }

@@ -60,3 +60,69 @@
         @error('status')<div class="invalid-feedback">{{ $message }}</div>@enderror
     </div>
 </div>
+
+<hr class="my-4">
+
+{{--
+    Login Account: a separate concept from "Role" above. "Role" is this
+    person's position within the barangay (e.g. Chairperson, Council
+    Member) and is just text. "Account Type" below is a real RACTS
+    system role (DILG Administrator or DILG Monitoring Staff) that
+    controls what they can do if they log in to this system.
+--}}
+@php
+    $hasAccount = $userLog?->hasLoginAccount();
+@endphp
+
+<div class="mt-2">
+    <h2 class="h6 mb-1">Login Account</h2>
+    <p class="text-muted small mb-3">
+        Optional. Give this person a RACTS account so they can log in themselves &mdash;
+        separate from their "Role" above, which is just their position in the barangay.
+    </p>
+
+    @unless ($hasAccount)
+        <div class="form-check mb-3">
+            <input type="checkbox" name="create_account" value="1" id="create-account-toggle" class="form-check-input" @checked(old('create_account'))>
+            <label for="create-account-toggle" class="form-check-label">Create a login account for this person</label>
+        </div>
+    @endunless
+
+    <div id="account-fields" class="row g-3 {{ $hasAccount || old('create_account') ? '' : 'd-none' }}">
+        <div class="col-md-4">
+            <label class="form-label">Username</label>
+            <input type="text" name="username" value="{{ old('username', $userLog?->account?->username) }}" class="form-control @error('username') is-invalid @enderror">
+            @error('username')<div class="invalid-feedback">{{ $message }}</div>@enderror
+        </div>
+        <div class="col-md-4">
+            <label class="form-label">{{ $hasAccount ? 'New Password' : 'Password' }}</label>
+            <input type="password" name="password" class="form-control @error('password') is-invalid @enderror" autocomplete="new-password">
+            @if ($hasAccount)
+                <div class="form-text">Leave blank to keep the current password.</div>
+            @endif
+            @error('password')<div class="invalid-feedback">{{ $message }}</div>@enderror
+        </div>
+        <div class="col-md-4">
+            <label class="form-label">Confirm Password</label>
+            <input type="password" name="password_confirmation" class="form-control" autocomplete="new-password">
+        </div>
+        <div class="col-md-4">
+            <label class="form-label">Account Type</label>
+            <select name="account_role" class="form-select @error('account_role') is-invalid @enderror">
+                <option value="">— Select —</option>
+                @foreach (\App\Models\User::ROLES as $value => $label)
+                    <option value="{{ $value }}" @selected(old('account_role', $userLog?->account?->role) === $value)>{{ $label }}</option>
+                @endforeach
+            </select>
+            @error('account_role')<div class="invalid-feedback">{{ $message }}</div>@enderror
+        </div>
+    </div>
+</div>
+
+@unless ($hasAccount)
+    <script>
+        document.getElementById('create-account-toggle')?.addEventListener('change', function () {
+            document.getElementById('account-fields').classList.toggle('d-none', !this.checked);
+        });
+    </script>
+@endunless

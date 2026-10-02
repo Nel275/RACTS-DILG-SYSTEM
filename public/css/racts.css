@@ -3,23 +3,67 @@
  * ---------------------------------------------------------------
  * Loaded after the Bootstrap 5.3 CDN stylesheet in layouts/app.blade.php.
  * Bootstrap 5.3 defines most component colors (buttons, links, focus
- * rings, list-groups, etc.) as CSS custom properties that fall back to
- * --bs-primary / --bs-primary-rgb, so re-declaring those two variables
- * on :root re-themes the existing Bootstrap components across every
- * page without touching each Blade file individually or adding a
- * build step. Everything below this is additive: new classes for the
- * sidebar shell, header, and a few small polish tweaks - no existing
- * Bootstrap class is redefined in a way that would change layout on
- * pages that don't use the new sidebar classes.
+ * rings, list-groups, badges, alerts, etc.) as CSS custom properties
+ * that fall back to a handful of root-level tokens (--bs-primary,
+ * --bs-success-bg-subtle, --bs-border-radius, --bs-box-shadow-sm, and
+ * so on), so re-declaring those tokens on :root re-themes the existing
+ * Bootstrap components across every page without touching each Blade
+ * file individually or adding a build step. Everything below this is
+ * additive: new classes for the sidebar shell, header, and a set of
+ * visual-polish tweaks to existing Bootstrap components - no existing
+ * class is renamed, and no markup changes are required for any of
+ * this to apply.
+ *
+ * Formal-office pass (follow-up round): the previous visual-refresh
+ * pass leaned on patterns common to modern SaaS dashboards - soft
+ * drop shadows on every card, fairly generous corner rounding, a
+ * tinted "chip" circle behind stat icons, a small hover animation on
+ * the sidebar, and - mainly through Bootstrap's own default palette -
+ * five or six different badge hues in play across the app (green,
+ * amber, red, cyan, gray, dark, navy) for things that were never
+ * meant to carry that much visual weight (an "Active" status pill, a
+ * "Filed" tag, a username badge). On a compliance-tracking tool meant
+ * to read as official DILG office software, that combination reads as
+ * busy and generic rather than calm and authoritative - the complaint
+ * this pass addresses.
+ *
+ * What changed, and what deliberately didn't:
+ *   - Corners are flatter, shadows are closer to a hairline than a
+ *     floating-card glow, and the sidebar's hover micro-animation is
+ *     gone - panels now read as bordered sheets of paper, not tiles
+ *     hovering above the page.
+ *   - Bootstrap's own semantic palette (success/danger/warning/info/
+ *     secondary/dark/primary, and the "-subtle"/"-emphasis" variants
+ *     every plain status badge in the app is built from) is re-themed
+ *     into a single consistent family: navy for anything neutral/
+ *     informational, and muted - not candy-bright - green/amber/red
+ *     for genuine status, matching the tone already used by the
+ *     compliance grid's own badges below. The result is the same
+ *     handful of colors reused everywhere instead of a different hue
+ *     per widget. Since this is a Bootstrap variable, it applies to
+ *     every ad-hoc "bg-success"/"badge bg-warning-subtle" class
+ *     already written across the Blade files with no markup changes.
+ *   - The compliance grid's own color system (.racts-color-select,
+ *     .racts-badge-green/yellow/red - green = on time, yellow =
+ *     late-ish, red = missing/late) is untouched on purpose: those
+ *     hardcode their own hex values rather than reading Bootstrap's
+ *     variables specifically so this kind of re-theme can never
+ *     accidentally dull the one place in the app where color is
+ *     load-bearing information, not decoration.
  */
 
 :root {
-    /* DILG-referenced palette: blue and red from the seal, kept muted
-       enough for a professional office UI (see PHASE_UI_SETUP.md). */
+    /* DILG-referenced palette: navy and red from the seal. The navy
+       does double duty as both the brand color and the "informational"
+       semantic color (replacing Bootstrap's default cyan "info"), so
+       the app reads as one consistent blue rather than brand-navy in
+       the sidebar and a completely different blue in badges. */
     --racts-primary: #0b3d91;
     --racts-primary-dark: #082c6b;
+    --racts-primary-soft: rgba(11, 61, 145, 0.08);
+    --racts-primary-border: rgba(11, 61, 145, 0.22);
     --racts-accent: #ce1126;
-    --racts-accent-soft: rgba(206, 17, 38, 0.14);
+    --racts-accent-soft: rgba(206, 17, 38, 0.12);
 
     --racts-sidebar-bg: #0d2340;
     --racts-sidebar-bg-hover: #16335c;
@@ -28,21 +72,133 @@
     --racts-sidebar-border: rgba(255, 255, 255, 0.08);
 
     --racts-topbar-bg: #ffffff;
-    --racts-page-bg: #f4f6f9;
-    --racts-radius: 0.6rem;
+    --racts-page-bg: #f4f6fa;
 
-    /* Re-theme Bootstrap's own components (buttons, links, focus rings,
-       pagination, etc.) to the RACTS primary blue. */
+    /* Flatter than the previous pass (was 0.6rem / 0.4rem) - official
+       office software reads more serious with minimal corner rounding
+       than with the generous, "friendly app" curves a dashboard
+       template typically ships with. */
+    --racts-radius: 0.3rem;
+    --racts-radius-sm: 0.25rem;
+
+    /* Neutral text/border tones used throughout this file instead of
+       one-off hex values, so the whole app reads as one consistent
+       palette rather than a patchwork of similar-but-different grays. */
+    --racts-ink: #1c2a3a;
+    --racts-text-muted: #6b7688;
+    --racts-border: #e6e9f0;
+    --racts-border-strong: #d7dce6;
+
+    /* A single neutral "chip" tone - what a plain, non-urgent status
+       badge (Filed, Closed, a username tag) now renders in instead of
+       Bootstrap's default gray-vs-near-black split between its
+       "secondary" and "dark" variants, which looked like two subtly
+       different grays doing the same job. */
+    --racts-chip-bg: #eceff3;
+    --racts-chip-text: #434b5c;
+    --racts-chip-border: #d7dce6;
+
+    /* Muted status colors - same hue family as the compliance grid's
+       badges (see .racts-badge-* below) rather than Bootstrap's
+       brighter stock green/red, so a status badge anywhere else in
+       the app (Active/Inactive, a "Not filed" warning) reads as the
+       same visual language as the grid instead of a louder, separate
+       one. */
+    --racts-ok: #2e7d52;
+    --racts-ok-bg: #e1ece5;
+    --racts-ok-text: #1f5538;
+    --racts-ok-border: #c3d9cb;
+
+    --racts-warn-bg: #f3ecd6;
+    --racts-warn-text: #6b551e;
+    --racts-warn-border: #e2d4ab;
+
+    --racts-bad: #c0443f;
+    --racts-bad-bg: #f3dfde;
+    --racts-bad-text: #7c2e2b;
+    --racts-bad-border: #e0c3c2;
+
+    /* Hairline-level shadows: a thin lift instead of the diffuse glow
+       a floating dashboard card uses, so stacked panels read as
+       bordered sheets rather than tiles hovering above the page. Also
+       feeds Bootstrap's own --bs-box-shadow-sm below, so the
+       ".shadow-sm" utility class already written on most ".card"
+       elements across the app picks this up with no markup changes. */
+    --racts-shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
+    --racts-shadow: 0 2px 8px rgba(16, 24, 40, 0.06);
+
+    /* --------------------------------------------------------------
+       Re-theme Bootstrap's own component palette. Everything below
+       is a Bootstrap-defined variable (see bootstrap.min.css's :root
+       block) - overriding it here re-colors every Bootstrap class
+       built from it (buttons, links, badges, alerts, form focus
+       rings, dropdowns, nav-tabs, pagination, ...) across every page,
+       without hand-editing each Blade file.
+       -------------------------------------------------------------- */
+
     --bs-primary: var(--racts-primary);
     --bs-primary-rgb: 11, 61, 145;
     --bs-link-color: var(--racts-primary);
     --bs-link-color-rgb: 11, 61, 145;
     --bs-link-hover-color: var(--racts-primary-dark);
     --bs-link-hover-color-rgb: 8, 44, 107;
+
+    /* Flatter corners and a near-flat default shadow app-wide (cards,
+       dropdown menus, modals, the analytics tabs, inputs, ...). */
+    --bs-border-radius: var(--racts-radius);
+    --bs-border-radius-sm: var(--racts-radius-sm);
+    --bs-border-radius-lg: 0.35rem;
+    --bs-border-radius-xl: 0.4rem;
+    --bs-box-shadow-sm: var(--racts-shadow-sm);
+    --bs-box-shadow: var(--racts-shadow);
+
+    /* "info" re-pointed from Bootstrap's default cyan to the app's own
+       navy, so the one or two places that use it (a notification
+       type, a username badge) read as "neutral/informational" in the
+       same blue as everything else branded, not an unrelated teal. */
+    --bs-info-bg-subtle: var(--racts-primary-soft);
+    --bs-info-text-emphasis: var(--racts-primary-dark);
+    --bs-info-border-subtle: var(--racts-primary-border);
+
+    --bs-primary-bg-subtle: var(--racts-primary-soft);
+    --bs-primary-text-emphasis: var(--racts-primary-dark);
+    --bs-primary-border-subtle: var(--racts-primary-border);
+
+    /* "secondary" and "dark" both collapse onto the same neutral chip
+       tone - see --racts-chip-* above. */
+    --bs-secondary-bg-subtle: var(--racts-chip-bg);
+    --bs-secondary-text-emphasis: var(--racts-chip-text);
+    --bs-secondary-border-subtle: var(--racts-chip-border);
+    --bs-dark-bg-subtle: var(--racts-chip-bg);
+    --bs-dark-text-emphasis: var(--racts-chip-text);
+    --bs-dark-border-subtle: var(--racts-chip-border);
+
+    /* Genuine status colors (Active/Inactive, "Not filed", the
+       Current-Cycle Progress legend) - muted to match the compliance
+       grid's own tone instead of Bootstrap's brighter stock palette.
+       Only success/danger have a solid ("bg-success") variant in use
+       anywhere in the app, so only those two re-theme the base color;
+       warning/info are only ever used in their "-subtle" form. */
+    --bs-success: var(--racts-ok);
+    --bs-success-rgb: 46, 125, 82;
+    --bs-success-bg-subtle: var(--racts-ok-bg);
+    --bs-success-text-emphasis: var(--racts-ok-text);
+    --bs-success-border-subtle: var(--racts-ok-border);
+
+    --bs-danger: var(--racts-bad);
+    --bs-danger-rgb: 192, 68, 63;
+    --bs-danger-bg-subtle: var(--racts-bad-bg);
+    --bs-danger-text-emphasis: var(--racts-bad-text);
+    --bs-danger-border-subtle: var(--racts-bad-border);
+
+    --bs-warning-bg-subtle: var(--racts-warn-bg);
+    --bs-warning-text-emphasis: var(--racts-warn-text);
+    --bs-warning-border-subtle: var(--racts-warn-border);
 }
 
 body {
     background-color: var(--racts-page-bg);
+    color: var(--racts-ink);
 }
 
 /* ------------------------------------------------------------------
@@ -78,13 +234,13 @@ body {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    padding: 1.25rem 1rem;
+    padding: 1.35rem 1.1rem;
     text-decoration: none;
     border-bottom: 1px solid var(--racts-sidebar-border);
 }
 
 .racts-brand img {
-    height: 60px;
+    height: 42px;
     width: auto;
     object-fit: contain;
     flex-shrink: 0;
@@ -96,19 +252,20 @@ body {
     font-size: 1.05rem;
     line-height: 1.2;
     margin: 0;
+    letter-spacing: 0.01em;
 }
 
 .racts-brand-text .racts-brand-subtitle {
     color: var(--racts-sidebar-text);
-    font-size: 0.55rem;
+    font-size: 0.68rem;
     line-height: 1.25;
     display: block;
-    margin-top: 0.15rem;
+    margin-top: 0.2rem;
 }
 
 /* Nav */
 .racts-sidebar-nav {
-    padding: 0.75rem 0.6rem;
+    padding: 0.85rem 0.7rem;
     flex: 1 1 auto;
     overflow-y: auto;
 }
@@ -116,14 +273,20 @@ body {
 .racts-sidebar-nav .nav-link {
     display: flex;
     align-items: center;
-    gap: 0.65rem;
+    gap: 0.7rem;
     color: var(--racts-sidebar-text);
-    border-radius: var(--racts-radius);
-    padding: 0.55rem 0.75rem;
+    border-radius: var(--racts-radius-sm);
+    padding: 0.6rem 0.8rem;
     margin-bottom: 0.15rem;
-    font-size: 0.92rem;
+    font-size: 0.9rem;
+    font-weight: 500;
     border-left: 3px solid transparent;
-    transition: background-color 0.15s ease, color 0.15s ease, padding-left 0.15s ease;
+    /* Background/color only - the previous pass also animated the
+       icon sideways on hover (transform: translateX), a small
+       micro-interaction that reads more "consumer app" than "office
+       intranet." Removed; the background change alone is enough
+       feedback that the item is interactive. */
+    transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .racts-sidebar-nav .nav-link i {
@@ -131,29 +294,25 @@ body {
     width: 1.25rem;
     text-align: center;
     flex-shrink: 0;
-    transition: transform 0.15s ease;
 }
 
 .racts-sidebar-nav .nav-link:hover,
 .racts-sidebar-nav .nav-link:focus {
     background-color: var(--racts-sidebar-bg-hover);
     color: var(--racts-sidebar-text-active);
-    padding-left: 0.95rem;
 }
 
-.racts-sidebar-nav .nav-link:hover i {
-    transform: translateX(2px);
-}
-
+/* The active item: previously a translucent accent-red fill plus a
+   red-tinted icon on top of the navy background - two colors doing
+   one job. Now a single flat highlight (the same tone used on hover)
+   with one solid accent border as the "you are here" marker, which
+   reads calmer and more like a government portal's sidebar and less
+   like a colorful app menu. */
 .racts-sidebar-nav .nav-link.active {
-    background-color: var(--racts-accent-soft);
+    background-color: var(--racts-sidebar-bg-hover);
     color: var(--racts-sidebar-text-active);
     border-left-color: var(--racts-accent);
     font-weight: 600;
-}
-
-.racts-sidebar-nav .nav-link.active i {
-    color: var(--racts-accent);
 }
 
 .racts-sidebar-nav .nav-badge {
@@ -161,7 +320,7 @@ body {
 }
 
 .racts-sidebar-footer {
-    padding: 0.85rem 1rem;
+    padding: 0.9rem 1.1rem;
     border-top: 1px solid var(--racts-sidebar-border);
     font-size: 0.72rem;
     color: var(--racts-sidebar-text);
@@ -177,23 +336,25 @@ body {
 
 .racts-topbar {
     background-color: var(--racts-topbar-bg);
-    border-bottom: 1px solid #e3e7ed;
-    padding: 0.65rem 1.25rem;
+    border-bottom: 1px solid var(--racts-border);
+    padding: 0.75rem 1.35rem;
     display: flex;
     align-items: center;
     gap: 1rem;
+    position: relative;
+    z-index: 5;
 }
 
 .racts-topbar-title h1 {
-    font-size: 1.15rem;
+    font-size: 1.1rem;
     font-weight: 700;
     margin: 0;
-    color: #1c2a3a;
+    color: var(--racts-ink);
 }
 
 .racts-breadcrumb {
     font-size: 0.78rem;
-    color: #7a8699;
+    color: var(--racts-text-muted);
     margin: 0;
 }
 
@@ -203,8 +364,8 @@ body {
 }
 
 .racts-sidebar-toggle {
-    color: #1c2a3a;
-    border: 1px solid #dde3ec;
+    color: var(--racts-ink);
+    border: 1px solid var(--racts-border-strong);
 }
 
 /* Notification bell */
@@ -212,17 +373,17 @@ body {
     position: relative;
     color: #495566;
     font-size: 1.2rem;
-    width: 2.3rem;
-    height: 2.3rem;
+    width: 2.4rem;
+    height: 2.4rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 50%;
-    transition: background-color 0.15s ease;
+    border-radius: var(--racts-radius-sm);
+    transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .racts-bell:hover {
-    background-color: #f0f2f6;
+    background-color: var(--racts-primary-soft);
     color: var(--racts-primary);
 }
 
@@ -238,21 +399,22 @@ body {
 .racts-user-toggle {
     display: flex;
     align-items: center;
-    gap: 0.55rem;
+    gap: 0.6rem;
     border: none;
     background: transparent;
-    padding: 0.3rem 0.5rem;
-    border-radius: var(--racts-radius);
+    padding: 0.35rem 0.55rem;
+    border-radius: var(--racts-radius-sm);
+    transition: background-color 0.15s ease;
 }
 
 .racts-user-toggle:hover {
-    background-color: #f0f2f6;
+    background-color: var(--racts-primary-soft);
 }
 
 .racts-avatar {
     width: 2.1rem;
     height: 2.1rem;
-    border-radius: 50%;
+    border-radius: var(--racts-radius-sm);
     background-color: var(--racts-primary);
     color: #fff;
     display: inline-flex;
@@ -266,13 +428,13 @@ body {
 .racts-user-name {
     font-size: 0.85rem;
     font-weight: 600;
-    color: #1c2a3a;
+    color: var(--racts-ink);
     line-height: 1.1;
 }
 
 .racts-user-role {
     font-size: 0.72rem;
-    color: #7a8699;
+    color: var(--racts-text-muted);
     line-height: 1.1;
 }
 
@@ -281,34 +443,126 @@ body {
 }
 
 /* ------------------------------------------------------------------
-   Small consistency polish applied to existing Bootstrap components
-   (cards, tables, badges) already used throughout the app.
+   Consistency polish applied to existing Bootstrap components
+   (cards, tables, badges, buttons, forms) already used throughout
+   the app. Nothing here is a new class the Blade files need to
+   adopt - it restyles the Bootstrap classes already in use.
    ------------------------------------------------------------------ */
 
 .card {
-    border: 1px solid #e9ecf2;
+    border: 1px solid var(--racts-border);
     border-radius: var(--racts-radius);
+    box-shadow: none;
+}
+
+.card-body {
+    padding: 1.1rem 1.25rem;
+}
+
+h1.h4, h2.h6 {
+    color: var(--racts-ink);
+}
+
+.card-body .h3 {
+    color: var(--racts-ink);
+    font-weight: 700;
+}
+
+/* The three dashboard summary cards share this exact structure (an
+   icon as the last flex child of the card body). The previous pass
+   turned this into a tinted circular "chip" regardless of what color
+   the icon's own class asked for - a stat-widget convention borrowed
+   from consumer dashboard templates. Left as a plain muted icon
+   instead, matching the icon's own markup (text-secondary) rather
+   than overriding it into a colored badge. */
+.card-body.d-flex > i.bi {
+    font-size: 1.9rem !important;
+    color: #aab2c0 !important;
+    flex-shrink: 0;
+}
+
+.table {
+    --bs-table-padding-y: 0.65rem;
+    --bs-table-padding-x: 0.85rem;
+}
+
+/* .table-sm is used for the dense report grids and log tables, which
+   need to stay compact - re-declared after the rule above so it keeps
+   winning for elements carrying both classes. */
+.table-sm {
+    --bs-table-padding-y: 0.5rem;
+    --bs-table-padding-x: 0.65rem;
 }
 
 .table thead th {
     font-size: 0.76rem;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.03em;
-    color: #6c7789;
+    letter-spacing: 0.04em;
+    color: var(--racts-text-muted);
+    border-bottom-width: 1px;
+}
+
+.table > tbody > tr:hover > * {
+    background-color: rgba(11, 61, 145, 0.025);
+}
+
+.form-label {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--racts-ink);
+    margin-bottom: 0.4rem;
+}
+
+.form-control,
+.form-select {
+    border-color: var(--racts-border-strong);
+    border-radius: var(--racts-radius-sm);
+    padding: 0.5rem 0.75rem;
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: var(--racts-primary);
 }
 
 .btn {
-    border-radius: 0.45rem;
+    --bs-btn-border-radius: var(--racts-radius-sm);
+    --bs-btn-padding-y: 0.5rem;
+    --bs-btn-padding-x: 1.05rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+/* .btn-sm is used heavily for row-level actions in tables - kept
+   compact on purpose, re-declared after .btn for the same reason as
+   .table-sm above. */
+.btn-sm {
+    --bs-btn-border-radius: 0.2rem;
+    --bs-btn-padding-y: 0.3rem;
+    --bs-btn-padding-x: 0.7rem;
+    font-weight: 600;
+}
+
+.btn-primary {
+    --bs-btn-box-shadow: none;
+    --bs-btn-hover-bg: var(--racts-primary-dark);
+    --bs-btn-hover-border-color: var(--racts-primary-dark);
+}
+
+.badge {
+    font-weight: 600;
+    letter-spacing: 0.01em;
 }
 
 .racts-empty-state {
     text-align: center;
     color: #8a94a3;
-    padding: 2.5rem 1rem;
+    padding: 2.75rem 1rem;
 }
 
 .racts-empty-state i {
-    font-size: 1.8rem;
+    font-size: 1.9rem;
     display: block;
     margin-bottom: 0.5rem;
     color: #c3cad6;
@@ -316,13 +570,17 @@ body {
 
 .app-footer {
     padding: 1rem 1.5rem;
-    color: #6c757d;
+    color: var(--racts-text-muted);
     font-size: 0.8rem;
 }
 
 @media (max-width: 991.98px) {
     .racts-content {
         padding: 1.1rem;
+    }
+
+    .card-body {
+        padding: 1rem;
     }
 }
 
@@ -348,7 +606,7 @@ body {
     left: 0;
     z-index: 2;
     background-color: #fff;
-    box-shadow: 1px 0 0 #dee2e6;
+    box-shadow: 1px 0 0 var(--racts-border-strong);
 }
 
 .racts-grid-table thead .racts-grid-sticky-col {
@@ -357,20 +615,40 @@ body {
 }
 
 /* Color-select tints itself to match the currently chosen grade, so a
-   filled-in row is scannable at a glance without opening every select. */
+   filled-in row is scannable at a glance without opening every select.
+   Border kept a shade stronger than the fill so the state reads clearly
+   even at a glance across a wide, busy grid.
+
+   This is the one place in the app where color is load-bearing
+   information rather than decoration (it IS the compliance grading),
+   which is why these three keep their own hardcoded hex values
+   instead of reading the Bootstrap variables re-themed above - a
+   future palette tweak up there should never be able to accidentally
+   change what a grid cell's color means. */
 .racts-color-select.racts-color-green {
-    background-color: #d1f3dd;
-    border-color: #75c795;
+    background-color: #d7f2e0;
+    border-color: #4caf72;
+    font-weight: 600;
 }
 
 .racts-color-select.racts-color-yellow {
-    background-color: #fff3cd;
-    border-color: #e6c34d;
+    background-color: #fff2c6;
+    border-color: #d9a90c;
+    font-weight: 600;
 }
 
 .racts-color-select.racts-color-red {
-    background-color: #f8d7da;
-    border-color: #e08792;
+    background-color: #fad8da;
+    border-color: #d9635f;
+    font-weight: 600;
+}
+
+.racts-badge-green,
+.racts-badge-yellow,
+.racts-badge-red {
+    padding: 0.42em 0.75em;
+    font-size: 0.78rem;
+    border-radius: var(--racts-radius-sm);
 }
 
 .racts-badge-green {
@@ -386,4 +664,24 @@ body {
 .racts-badge-red {
     background-color: #d9534f;
     color: #fff;
+}
+
+/* ------------------------------------------------------------------
+   Follow-up round: the "⋮" Actions dropdown on a table's last row(s)
+   was getting clipped - Bootstrap's .table-responsive sets
+   overflow-x: auto, and per the CSS overflow spec that forces
+   overflow-y to become 'auto' too (it can't stay 'visible' once the
+   other axis isn't), so a dropdown opening below the last row gets
+   cut off by that invisible vertical boundary. Popper then tries to
+   keep the menu inside that same boundary by shrinking it down to a
+   tiny scrollable box - the "only shows 1-2 items with little scroll
+   arrows" look.
+   Fix: this class turns overflow back to visible for tables that
+   don't actually need horizontal scrolling (their columns are short
+   enough to fit at normal widths), so the dropdown has room to open
+   fully. Not applied to .racts-grid-table's wrapper (the Barangay/SK
+   Reports grid), which genuinely needs the horizontal scroll with its
+   many report columns. */
+.racts-table-no-clip {
+    overflow: visible;
 }

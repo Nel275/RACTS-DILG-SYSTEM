@@ -90,7 +90,7 @@ class BarangayLogsTest extends TestCase
 
         $response = $this->actingAs($this->admin())->post('/barangay-log-details', [
             'barangay_id' => $barangay->id,
-            'barangay_log_id' => $item->id,
+            'item_description' => $item->item_description,
             'deadline_date' => '2026-09-30',
         ]);
 
@@ -100,6 +100,62 @@ class BarangayLogsTest extends TestCase
             'barangay_log_id' => $item->id,
             'item_description' => 'Monthly Accomplishment Report',
             'status' => BarangayLogDetail::STATUS_PENDING,
+        ]);
+    }
+
+    /**
+     * Follow-up round: Add Log Entry's Report field used to require
+     * picking from the existing catalog - you had to add a report
+     * under "Manage Reports" first before you could log any barangay
+     * against it. It's now a single free-text field: typing a name
+     * that matches an existing catalog item (case/whitespace-
+     * insensitive) reuses it...
+     */
+    public function test_adding_a_log_entry_with_an_existing_report_name_reuses_the_catalog_item(): void
+    {
+        $barangay = $this->barangay();
+        $item = $this->logItem('Monthly Accomplishment Report', '2026-09-30');
+
+        $this->actingAs($this->admin())->post('/barangay-log-details', [
+            'barangay_id' => $barangay->id,
+            'item_description' => '  monthly accomplishment report  ',
+            'deadline_date' => '2026-10-15',
+        ])->assertRedirect(route('barangay-log-details.index'));
+
+        // Reused the existing catalog item - no second "Monthly
+        // Accomplishment Report" row was created.
+        $this->assertSame(1, BarangayLog::where('item_description', 'Monthly Accomplishment Report')->count());
+        $this->assertDatabaseHas('barangay_log_details', [
+            'barangay_id' => $barangay->id,
+            'barangay_log_id' => $item->id,
+            'deadline_date' => '2026-10-15',
+        ]);
+    }
+
+    /**
+     * ...and typing a name that doesn't match anything in the catalog
+     * yet adds it there automatically, using this same deadline, so a
+     * brand-new report type and its first log entry can be created in
+     * one step.
+     */
+    public function test_adding_a_log_entry_with_a_new_report_name_creates_the_catalog_item(): void
+    {
+        $barangay = $this->barangay();
+
+        $this->actingAs($this->admin())->post('/barangay-log-details', [
+            'barangay_id' => $barangay->id,
+            'item_description' => 'Brand New Report Type',
+            'deadline_date' => '2026-11-30',
+        ])->assertRedirect(route('barangay-log-details.index'));
+
+        $this->assertDatabaseHas('barangay_logs', [
+            'item_description' => 'Brand New Report Type',
+            'deadline_date' => '2026-11-30',
+            'status' => BarangayLog::STATUS_ACTIVE,
+        ]);
+        $this->assertDatabaseHas('barangay_log_details', [
+            'barangay_id' => $barangay->id,
+            'item_description' => 'Brand New Report Type',
         ]);
     }
 
@@ -190,6 +246,55 @@ class BarangayLogsTest extends TestCase
             return $entries->count() === 1
                 && $entries->first()->item_description === 'Report A';
         });
+    }
+
+    public function test_report_detail_page_only_shows_barangays_logged_with_that_report(): void
+    {
+        $malvar = $this->barangay('Malvar');
+        $rosario = $this->barangay('Rosario');
+        $otherBarangay = $this->barangay('Calao East');
+
+        $kasambahay = $this->logItem('Kasambahay Report', '2026-12-31');
+        $otherReport = $this->logItem('Other Report', '2026-12-31');
+
+        BarangayLogDetail::create([
+            'barangay_id' => $malvar->id,
+            'barangay_log_id' => $kasambahay->id,
+            'item_description' => 'Kasambahay Report',
+            'deadline_date' => '2026-12-31',
+            'status' => BarangayLogDetail::STATUS_PENDING,
+        ]);
+        BarangayLogDetail::create([
+            'barangay_id' => $rosario->id,
+            'barangay_log_id' => $kasambahay->id,
+            'item_description' => 'Kasambahay Report',
+            'deadline_date' => '2026-12-31',
+            'status' => BarangayLogDetail::STATUS_PENDING,
+        ]);
+        // A different report, same barangay catalog - must not leak in.
+        BarangayLogDetail::create([
+            'barangay_id' => $otherBarangay->id,
+            'barangay_log_id' => $otherReport->id,
+            'item_description' => 'Other Report',
+            'deadline_date' => '2026-12-31',
+            'status' => BarangayLogDetail::STATUS_PENDING,
+        ]);
+
+        $response = $this->actingAs($this->admin())->get("/barangay-logs/{$kasambahay->id}");
+
+        $response->assertOk();
+        $response->assertViewHas('entries', function ($entries) {
+            return $entries->count() === 2
+                && $entries->pluck('barangay.barangay_name')->sort()->values()->all() === ['Malvar', 'Rosario'];
+        });
+    }
+
+    public function test_both_roles_can_view_the_report_detail_page(): void
+    {
+        $item = $this->logItem();
+
+        $this->actingAs($this->admin())->get("/barangay-logs/{$item->id}")->assertOk();
+        $this->actingAs($this->staff())->get("/barangay-logs/{$item->id}")->assertOk();
     }
 
     public function test_admin_can_delete_a_log_detail_entry(): void

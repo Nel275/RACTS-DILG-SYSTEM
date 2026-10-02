@@ -162,4 +162,78 @@ class BarangayLogFilingTest extends TestCase
 
         $this->assertSame(BarangayLogDetail::STATUS_CLOSED, $entry->fresh()->status);
     }
+
+    /**
+     * Follow-up round: View File opens whatever's actually attached,
+     * regardless of whether it's been filed yet - staged or filed,
+     * report_file_path always points at the real current location.
+     */
+    public function test_view_file_streams_the_staged_report(): void
+    {
+        Storage::fake('local');
+
+        $entry = $this->entry();
+        $file = UploadedFile::fake()->create('report.pdf', 100, 'application/pdf');
+
+        $this->actingAs($this->staff())->patch("/barangay-log-details/{$entry->id}/submit", [
+            'date_submitted' => '2026-09-28 10:00:00',
+            'report_file' => $file,
+        ]);
+
+        $this->actingAs($this->staff())->get("/barangay-log-details/{$entry->id}/view-file")
+            ->assertOk();
+    }
+
+    /**
+     * Follow-up round: regression test for a report where View File
+     * downloaded a PDF instead of opening it in the browser's built-in
+     * viewer - the Content-Type has to actually say "application/pdf"
+     * for that viewer to kick in, and it has to come from the file's
+     * extension rather than content-sniffing, since PHP's fileinfo
+     * extension (what content-sniffing depends on) isn't guaranteed to
+     * be enabled - XAMPP in particular often ships without it.
+     */
+    public function test_view_file_sets_the_correct_content_type_for_a_pdf(): void
+    {
+        Storage::fake('local');
+
+        $entry = $this->entry();
+        $file = UploadedFile::fake()->create('report.pdf', 100, 'application/pdf');
+
+        $this->actingAs($this->staff())->patch("/barangay-log-details/{$entry->id}/submit", [
+            'date_submitted' => '2026-09-28 10:00:00',
+            'report_file' => $file,
+        ]);
+
+        $this->actingAs($this->staff())->get("/barangay-log-details/{$entry->id}/view-file")
+            ->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf');
+    }
+
+    public function test_view_file_still_works_after_the_report_has_been_filed(): void
+    {
+        Storage::fake('local');
+
+        $entry = $this->entry();
+        $file = UploadedFile::fake()->create('report.pdf', 100, 'application/pdf');
+
+        $this->actingAs($this->staff())->patch("/barangay-log-details/{$entry->id}/submit", [
+            'date_submitted' => '2026-09-28 10:00:00',
+            'report_file' => $file,
+        ]);
+        $this->actingAs($this->admin())->patch("/barangay-log-details/{$entry->id}/download");
+
+        $this->actingAs($this->admin())->get("/barangay-log-details/{$entry->id}/view-file")
+            ->assertOk();
+    }
+
+    public function test_view_file_404s_when_no_file_is_attached(): void
+    {
+        Storage::fake('local');
+
+        $entry = $this->entry();
+
+        $this->actingAs($this->admin())->get("/barangay-log-details/{$entry->id}/view-file")
+            ->assertNotFound();
+    }
 }

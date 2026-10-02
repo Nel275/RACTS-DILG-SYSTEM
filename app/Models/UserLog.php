@@ -7,10 +7,13 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * Follow-up round: a barangay's personnel/officials roster (client's
- * reference table `userslogs`). Deliberately NOT related to the real
- * `users` table - a UserLog entry is a personnel record (name,
- * birthdate, designation, role), not a login account, and creating one
- * here never creates or touches an actual RACTS user account.
+ * reference table `userslogs`). A UserLog entry is a personnel record
+ * (name, birthdate, designation, role) first and foremost - most never
+ * touch the real `users` table at all. Optionally, though, a personnel
+ * record can be given a real RACTS login account (DILG Administrator or
+ * DILG Monitoring Staff role only): `user_id` links to that account when
+ * one exists, and stays null for a plain personnel record with no login
+ * access. See `account()` / `hasLoginAccount()` below.
  */
 class UserLog extends Model
 {
@@ -38,22 +41,42 @@ class UserLog extends Model
         'date_process',
         'processed_by',
         'barangay_id',
+        'user_id',
     ];
 
     /**
+     * Follow-up round: pinned to 'date:Y-m-d' instead of plain 'date' -
+     * see BarangayLogDetail's matching doc comment for why (MySQL's
+     * DATE column silently truncates the difference away; a SQLite
+     * test database doesn't).
+     *
      * @return array<string, string>
      */
     protected function casts(): array
     {
         return [
-            'birthdate' => 'date',
-            'date_process' => 'date',
+            'birthdate' => 'date:Y-m-d',
+            'date_process' => 'date:Y-m-d',
         ];
     }
 
     public function barangay()
     {
         return $this->belongsTo(Barangay::class);
+    }
+
+    /**
+     * The real RACTS login account linked to this personnel record, if
+     * one has been given to them. Null means they have no login access.
+     */
+    public function account()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function hasLoginAccount(): bool
+    {
+        return $this->user_id !== null;
     }
 
     public function fullName(): string

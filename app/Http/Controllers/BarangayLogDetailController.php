@@ -6,10 +6,13 @@ use App\Models\AuditLog;
 use App\Models\Barangay;
 use App\Models\BarangayLog;
 use App\Models\BarangayLogDetail;
+use App\Models\ReportRequirement;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Follow-up round: the Barangay Log Details list - built from the
@@ -18,10 +21,30 @@ use Illuminate\View\View;
  * dropdown to pick the report/item type; Receiving Store, Total, and
  * Balance left out entirely, as asked). Lives as a second tab on the
  * existing Barangay Reports page - see report-grid/barangay.blade.php.
+ *
+ * Follow-up round: Report Filing is no longer Barangay-only - index()
+ * and store() are now thin per-council wrappers (indexSk()/storeSk())
+ * around a shared implementation, the same split ReportGridController
+ * already uses for the Compliance Grid's barangay()/sk() methods. Every
+ * other action here (show, markSubmitted, viewFile, download, close,
+ * destroy) stays a single shared method - it's reached by a
+ * BarangayLogDetail's own id, which already identifies which council
+ * it belongs to via its barangayLog relation, so there's nothing for a
+ * second, SK-specific route to add.
  */
 class BarangayLogDetailController extends Controller
 {
     public function index(Request $request): View
+    {
+        return $this->listFor($request, ReportRequirement::COUNCIL_BARANGAY, 'barangay-log-details.index');
+    }
+
+    public function indexSk(Request $request): View
+    {
+        return $this->listFor($request, ReportRequirement::COUNCIL_SK, 'sk-log-details.index');
+    }
+
+    private function listFor(Request $request, string $councilType, string $viewName): View
     {
         // Self-healing status, the same idea as the automatic late-
         // submission checks used elsewhere in RACTS, just without a
@@ -29,6 +52,9 @@ class BarangayLogDetailController extends Controller
         // deadline has already passed is flipped to "missed" right
         // before the list is built, so the Status column and stat
         // cards are always accurate without anyone running anything.
+        // Left unscoped by council - it's a harmless, idempotent sweep
+        // either way, and scoping it would only add a join for no
+        // behavioral difference.
         BarangayLogDetail::where('status', BarangayLogDetail::STATUS_PENDING)
             ->whereDate('deadline_date', '<', now()->toDateString())
             ->update(['status' => BarangayLogDetail::STATUS_MISSED]);
@@ -41,6 +67,7 @@ class BarangayLogDetailController extends Controller
 
         $query = BarangayLogDetail::query()
             ->with(['barangay', 'barangayLog'])
+            ->whereHas('barangayLog', fn ($q) => $q->where('council_type', $councilType))
             ->when($status, fn ($q, $status) => $q->where('status', $status))
             ->when($reportId, fn ($q, $reportId) => $q->where('barangay_log_id', $reportId))
             ->when($search, function ($q, $search) {
@@ -62,11 +89,11 @@ class BarangayLogDetailController extends Controller
 
         $entries = $query->orderByDesc('deadline_date')->orderByDesc('id')->paginate(10)->withQueryString();
 
-        $reportOptions = BarangayLog::orderBy('item_description')->get();
+        $reportOptions = BarangayLog::forCouncil($councilType)->orderBy('item_description')->get();
         $barangayOptions = Barangay::where('status', Barangay::STATUS_ACTIVE)->orderBy('barangay_name')->get();
         $activeLogItems = $reportOptions->where('status', BarangayLog::STATUS_ACTIVE);
 
-        return view('barangay-log-details.index', compact(
+        return view($viewName, compact(
             'entries',
             'stats',
             'status',
@@ -76,19 +103,30 @@ class BarangayLogDetailController extends Controller
             'to',
             'reportOptions',
             'barangayOptions',
-            'activeLogItems'
+            'activeLogItems',
+            'councilType'
         ));
     }
 
     public function store(Request $request): RedirectResponse
     {
+        return $this->storeFor($request, ReportRequirement::COUNCIL_BARANGAY, 'barangay-log-details.index');
+    }
+
+    public function storeSk(Request $request): RedirectResponse
+    {
+        return $this->storeFor($request, ReportRequirement::COUNCIL_SK, 'sk-log-details.index');
+    }
+
+    private function storeFor(Request $request, string $councilType, string $routeName): RedirectResponse
+    {
         $validated = $request->validate([
             'barangay_id' => ['required', 'exists:barangays,id'],
-            'barangay_log_id' => ['required', 'exists:barangay_logs,id'],
+            'item_description' => ['required', 'string', 'max:255'],
             'deadline_date' => ['required', 'date'],
         ]);
 
-        $logItem = BarangayLog::findOrFail($validated['barangay_log_id']);
+        $logItem = $this->findOrCreateLogItem(trim($validated['item_description']), $validated['deadline_date'], $councilType);
 
         $entry = BarangayLogDetail::create([
             'barangay_id' => $validated['barangay_id'],
@@ -101,13 +139,50 @@ class BarangayLogDetailController extends Controller
         ]);
 
         AuditLog::record($request->user(), sprintf(
-            'Added barangay log entry "%s" for %s.',
+            'Added %s log entry "%s" for %s.',
+            $logItem->councilLabel(),
             $entry->item_description,
             $entry->barangay->barangay_name
         ));
 
-        return redirect()->route('barangay-log-details.index')
+        return redirect()->route($routeName)
             ->with('success', 'Log entry added.');
+    }
+
+    /**
+     * Follow-up round: Add Log Entry's Report field used to force you
+     * over to "Manage Reports" first to add a brand-new report type
+     * before you could log any barangay against it. It's now a single
+     * step - type an existing report's name (autocomplete suggests the
+     * active ones) to reuse it, or type a name that doesn't exist yet
+     * and it's added to the report catalog on the spot, using this same
+     * deadline. Matching is case/whitespace-insensitive and checks the
+     * whole catalog (active and deactivated alike) so retyping an
+     * existing name - even a deactivated one - never creates a
+     * duplicate catalog entry.
+     *
+     * Follow-up round: the lookup is scoped to $councilType, so "Add
+     * Log Entry" on the SK side can never silently reuse (or collide
+     * with) a Barangay catalog item that happens to share the same
+     * name, and vice versa - the two councils' report catalogs are
+     * kept fully independent, same as their ReportRequirement slots.
+     */
+    private function findOrCreateLogItem(string $description, string $deadlineDate, string $councilType): BarangayLog
+    {
+        $existing = BarangayLog::forCouncil($councilType)
+            ->whereRaw('LOWER(item_description) = ?', [strtolower($description)])
+            ->first();
+
+        if ($existing) {
+            return $existing;
+        }
+
+        return BarangayLog::create([
+            'item_description' => $description,
+            'council_type' => $councilType,
+            'deadline_date' => $deadlineDate,
+            'status' => BarangayLog::STATUS_ACTIVE,
+        ]);
     }
 
     public function show(BarangayLogDetail $barangayLogDetail): View
@@ -156,6 +231,57 @@ class BarangayLogDetailController extends Controller
 
         return redirect()->route('barangay-log-details.show', $barangayLogDetail)
             ->with('success', 'Submission recorded.');
+    }
+
+    /**
+     * Follow-up round: lets you open whatever's actually attached right
+     * now, whether it's still staged or has already been filed into the
+     * barangay's folder - report_file_path always points at the file's
+     * real current location either way, so this works regardless of
+     * status. Streamed inline (asks the browser to display it - a PDF
+     * or image opens right in the tab; a Word doc still downloads,
+     * since browsers have no built-in way to show one) rather than
+     * forced as a download.
+     *
+     * The Content-Type is looked up from the file's own extension
+     * instead of leaving Storage::response() to detect it from the
+     * file's contents - some PHP installs (XAMPP's included one, in
+     * particular) don't have the fileinfo extension enabled, which is
+     * what that automatic detection depends on. Without it, the
+     * browser isn't told the file is actually a PDF and falls back to
+     * downloading it instead of opening its built-in viewer. Looking
+     * the type up from the extension sidesteps that entirely.
+     */
+    public function viewFile(BarangayLogDetail $barangayLogDetail): StreamedResponse
+    {
+        abort_unless($barangayLogDetail->hasReportFile(), 404);
+        abort_unless(Storage::disk('local')->exists($barangayLogDetail->report_file_path), 404);
+
+        return Storage::disk('local')->response(
+            $barangayLogDetail->report_file_path,
+            $barangayLogDetail->report_original_name,
+            ['Content-Type' => $this->reportFileMimeType($barangayLogDetail->report_original_name)]
+        );
+    }
+
+    /**
+     * Fallback mime-type lookup for viewFile() - see its doc comment
+     * for why this doesn't rely on Storage's automatic detection.
+     * Covers exactly the extensions the submit form already accepts
+     * (see markSubmitted()'s validation above).
+     */
+    private function reportFileMimeType(?string $originalName): string
+    {
+        $extension = strtolower(pathinfo($originalName ?? '', PATHINFO_EXTENSION));
+
+        return match ($extension) {
+            'pdf' => 'application/pdf',
+            'jpg', 'jpeg' => 'image/jpeg',
+            'png' => 'image/png',
+            'doc' => 'application/msword',
+            'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            default => 'application/octet-stream',
+        };
     }
 
     /**
@@ -210,13 +336,27 @@ class BarangayLogDetailController extends Controller
     public function destroy(Request $request, BarangayLogDetail $barangayLogDetail): RedirectResponse
     {
         $description = sprintf('"%s" (%s)', $barangayLogDetail->item_description, $barangayLogDetail->barangay->barangay_name);
+        $routeName = $this->filingIndexRouteFor($barangayLogDetail);
 
         $barangayLogDetail->delete();
 
         AuditLog::record($request->user(), sprintf('Deleted barangay log entry %s.', $description));
 
-        return redirect()->route('barangay-log-details.index')
+        return redirect()->route($routeName)
             ->with('success', 'Log entry deleted.');
+    }
+
+    /**
+     * Which council's Report Filing list an entry belongs to, so an
+     * action on an SK entry never redirects back to the Barangay list
+     * (or vice versa). Resolved from the entry's barangayLog relation -
+     * see BarangayLog's own doc comment on council_type.
+     */
+    private function filingIndexRouteFor(BarangayLogDetail $barangayLogDetail): string
+    {
+        return $barangayLogDetail->barangayLog->council_type === ReportRequirement::COUNCIL_SK
+            ? 'sk-log-details.index'
+            : 'barangay-log-details.index';
     }
 
     private function validDate(?string $value): ?string
