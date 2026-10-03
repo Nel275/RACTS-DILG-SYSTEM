@@ -24,6 +24,11 @@ class UserLog extends Model
     public const STATUS_ACTIVE = 'active';
     public const STATUS_INACTIVE = 'inactive';
 
+    /** Options for the Gender field on the personnel form. */
+
+    public const GENDERS = ['Male', 'Female'];
+
+
     public const STATUSES = [
         self::STATUS_ACTIVE => 'Active',
         self::STATUS_INACTIVE => 'Inactive',

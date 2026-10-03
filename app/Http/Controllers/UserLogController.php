@@ -174,16 +174,35 @@ class UserLogController extends Controller
 
     private function validateUserLog(Request $request): array
     {
+        // Tidy spacing first so "  Juan   Dela Cruz " is checked and saved as "Juan Dela Cruz".
+        $request->merge(collect(['first_name', 'middle_name', 'last_name', 'designation', 'roles'])
+            ->mapWithKeys(fn ($field) => [$field => $request->filled($field)
+                ? trim(preg_replace('/\s+/u', ' ', (string) $request->input($field)))
+                : null])
+            ->all());
+
+        // Letters (incl. Ñ/accents), spaces, periods, apostrophes and hyphens -
+        // e.g. "Ma. Cristina", "Dela Cruz-Santos", "O'Neil" - and at least one letter.
+        $text = 'regex:/^(?=.*\pL)[\pL .\'\-]+$/u';
+
         return $request->validate([
-            'first_name' => ['required', 'string', 'max:150'],
-            'middle_name' => ['nullable', 'string', 'max:150'],
-            'last_name' => ['required', 'string', 'max:150'],
-            'birthdate' => ['required', 'date'],
-            'gender' => ['required', 'string', 'max:150'],
-            'designation' => ['required', 'string', 'max:150'],
-            'roles' => ['required', 'string', 'max:150'],
+            'first_name' => ['required', 'string', 'max:100', $text],
+            'middle_name' => ['nullable', 'string', 'max:100', $text],
+            'last_name' => ['required', 'string', 'max:100', $text],
+            'birthdate' => ['required', 'date', 'after:1900-01-01', 'before_or_equal:today'],
+            'gender' => ['required', Rule::in(UserLog::GENDERS)],
+            'designation' => ['required', 'string', 'max:100', $text],
+            'roles' => ['required', 'string', 'max:100', $text],
             'status' => ['nullable', Rule::in(array_keys(UserLog::STATUSES))],
             'barangay_id' => ['nullable', 'exists:barangays,id'],
+        ], [
+            'first_name.regex' => 'First name may only contain letters, spaces, periods, apostrophes and hyphens.',
+            'middle_name.regex' => 'Middle name may only contain letters, spaces, periods, apostrophes and hyphens.',
+            'last_name.regex' => 'Last name may only contain letters, spaces, periods, apostrophes and hyphens.',
+            'designation.regex' => 'Designation may only contain letters, spaces, periods, apostrophes and hyphens.',
+            'roles.regex' => 'Role may only contain letters, spaces, periods, apostrophes and hyphens.',
+            'birthdate.before_or_equal' => 'Birthdate cannot be in the future.',
+            'gender.in' => 'Please select a gender.',
         ]);
     }
 
@@ -196,13 +215,15 @@ class UserLogController extends Controller
     {
         return $request->validate([
             'username' => [
-                'required', 'string', 'max:255',
+                'required', 'string', 'min:4', 'max:50', 'regex:/^[A-Za-z0-9._]+$/',
                 Rule::unique('users', 'username')->ignore($existingUser?->id),
             ],
             'password' => $passwordRequired
                 ? ['required', 'string', 'min:8', 'confirmed']
                 : ['nullable', 'string', 'min:8', 'confirmed'],
             'account_role' => ['required', Rule::in([User::ROLE_ADMIN, User::ROLE_STAFF])],
+        ], [
+            'username.regex' => 'Username may only contain letters, numbers, periods and underscores (no spaces).',
         ]);
     }
 }
