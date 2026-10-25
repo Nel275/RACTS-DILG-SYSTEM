@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Rules\ValidUsername;
+use App\Rules\StrongPassword;
+use App\Rules\NoInappropriateWords;
 use App\Models\AuditLog;
 use App\Models\Barangay;
 use App\Models\User;
@@ -184,15 +187,16 @@ class UserLogController extends Controller
         // Letters (incl. Ñ/accents), spaces, periods, apostrophes and hyphens -
         // e.g. "Ma. Cristina", "Dela Cruz-Santos", "O'Neil" - and at least one letter.
         $text = 'regex:/^(?=.*\pL)[\pL .\'\-]+$/u';
+        $clean = new NoInappropriateWords;
 
         return $request->validate([
-            'first_name' => ['required', 'string', 'max:100', $text],
-            'middle_name' => ['nullable', 'string', 'max:100', $text],
-            'last_name' => ['required', 'string', 'max:100', $text],
+            'first_name' => ['required', 'string', 'max:100', $text, $clean],
+            'middle_name' => ['nullable', 'string', 'max:100', $text, $clean],
+            'last_name' => ['required', 'string', 'max:100', $text, $clean],
             'birthdate' => ['required', 'date', 'after:1900-01-01', 'before_or_equal:today'],
             'gender' => ['required', Rule::in(UserLog::GENDERS)],
-            'designation' => ['required', 'string', 'max:100', $text],
-            'roles' => ['required', 'string', 'max:100', $text],
+            'designation' => ['required', 'string', 'max:100', $text, $clean],
+            'roles' => ['required', 'string', 'max:100', $text, $clean],
             'status' => ['nullable', Rule::in(array_keys(UserLog::STATUSES))],
             'barangay_id' => ['nullable', 'exists:barangays,id'],
         ], [
@@ -215,15 +219,13 @@ class UserLogController extends Controller
     {
         return $request->validate([
             'username' => [
-                'required', 'string', 'min:4', 'max:50', 'regex:/^[A-Za-z0-9._]+$/',
+                'required', 'string', 'max:30', new ValidUsername,
                 Rule::unique('users', 'username')->ignore($existingUser?->id),
             ],
             'password' => $passwordRequired
-                ? ['required', 'string', 'min:8', 'confirmed']
-                : ['nullable', 'string', 'min:8', 'confirmed'],
+                ? ['required', 'string', 'confirmed', new StrongPassword($request->input('username'))]
+                : ['nullable', 'string', 'confirmed', new StrongPassword($request->input('username'))],
             'account_role' => ['required', Rule::in([User::ROLE_ADMIN, User::ROLE_STAFF])],
-        ], [
-            'username.regex' => 'Username may only contain letters, numbers, periods and underscores (no spaces).',
         ]);
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Rules\PlainText;
 use App\Models\AuditLog;
 use App\Models\ReportRequirement;
 use App\Services\RankingCalculator;
@@ -112,7 +113,7 @@ class ReportGridController extends Controller
     public function storeSlot(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'report_name' => 'required|string|max:255',
+            'report_name' => ['required', 'string', 'max:255', new PlainText],
             'council_type' => ['required', 'in:'.implode(',', array_keys(ReportRequirement::COUNCIL_TYPES))],
             'frequency' => ['required', 'in:'.implode(',', array_keys(ReportRequirement::FREQUENCIES))],
             'display_order' => 'nullable|integer|min:0',
@@ -145,7 +146,7 @@ class ReportGridController extends Controller
         // a report that genuinely needs a different frequency is better
         // added as a new slot and the old one deactivated.
         $validated = $request->validate([
-            'report_name' => 'required|string|max:255',
+            'report_name' => ['required', 'string', 'max:255', new PlainText],
             'display_order' => 'nullable|integer|min:0',
         ]);
 

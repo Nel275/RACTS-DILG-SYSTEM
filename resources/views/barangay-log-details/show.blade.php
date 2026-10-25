@@ -32,6 +32,11 @@
                 <dt class="col-sm-3">Report</dt>
                 <dd class="col-sm-9">{{ $entry->item_description }}</dd>
 
+                @if ($entry->period)
+                    <dt class="col-sm-3">Reporting Period</dt>
+                    <dd class="col-sm-9">{{ $entry->periodLabel() }}</dd>
+                @endif
+
                 <dt class="col-sm-3">Deadline</dt>
                 <dd class="col-sm-9">{{ $entry->deadline_date->format('F j, Y') }}</dd>
 
@@ -61,7 +66,41 @@
                         <span class="text-muted">No file attached yet.</span>
                     @endif
                 </dd>
+
+                @if ($entry->reviewed_at)
+                    <dt class="col-sm-3">DILG Review</dt>
+                    <dd class="col-sm-9">
+                        {{ $entry->statusLabel() }} by {{ $entry->reviewed_by }} on {{ $entry->reviewed_at->format('F j, Y g:i A') }}
+                        @if ($entry->review_remarks)
+                            <div class="small text-muted">{{ $entry->review_remarks }}</div>
+                        @endif
+                    </dd>
+                @endif
             </dl>
+
+            @if (auth()->user()->isAdmin() && $entry->isSubmittedToDilg() && $entry->status !== \App\Models\BarangayLogDetail::STATUS_CLOSED)
+                <form method="POST" class="row g-2 align-items-end mt-3 border-top pt-3">
+                    @csrf
+                    @method('PATCH')
+                    <div class="col-md-8">
+                        <label class="form-label small mb-1" for="review-remarks">DILG feedback (required to return)</label>
+                        <input type="text" id="review-remarks" name="review_remarks" maxlength="1000" class="form-control form-control-sm @error('review_remarks') is-invalid @enderror"
+                               value="{{ old('review_remarks') }}">
+                        @error('review_remarks')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
+                    <div class="col-md-4 d-flex gap-2">
+                        @if ($entry->status !== \App\Models\BarangayLogDetail::STATUS_ACCEPTED)
+                            <button type="submit" formaction="{{ route('barangay-log-details.accept', $entry) }}" class="btn btn-success btn-sm">
+                                <i class="bi bi-check2-circle"></i> Accept
+                            </button>
+                        @endif
+                        <button type="submit" formaction="{{ route('barangay-log-details.return', $entry) }}" class="btn btn-outline-warning btn-sm"
+                                onclick="return confirm('Return this report to the barangay for revision?');">
+                            <i class="bi bi-arrow-return-left"></i> Return for Revision
+                        </button>
+                    </div>
+                </form>
+            @endif
 
             <div class="d-flex gap-2 mt-3">
                 @if ($entry->hasReportFile() && ! $entry->isFiled())

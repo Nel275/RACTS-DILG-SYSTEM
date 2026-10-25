@@ -204,6 +204,12 @@ class CheckLateSubmissions extends Command
                 continue;
             }
 
+            // Barangay accounts only hear about their own barangay; DILG
+            // accounts are alerted about every barangay.
+            if ($user->isBarangay() && $user->barangay_id !== $barangay->id) {
+                continue;
+            }
+
             Notification::create([
                 'user_id' => $user->id,
                 'report_record_id' => $record?->id,

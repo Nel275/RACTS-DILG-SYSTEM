@@ -35,22 +35,35 @@
         // `pattern` is matched with request()->routeIs() - using the
         // group's wildcard (e.g. "barangays.*") means create/edit/show
         // sub-pages all correctly highlight their parent menu item.
-        $navItems = [
-            ['label' => 'Dashboard', 'icon' => 'bi-speedometer2', 'route' => 'dashboard', 'pattern' => 'dashboard'],
-            ['label' => 'Barangays', 'icon' => 'bi-signpost-2-fill', 'route' => 'barangays.index', 'pattern' => 'barangays.*'],
-            ['label' => 'User Logs', 'icon' => 'bi-person-lines-fill', 'route' => 'user-logs.index', 'pattern' => 'user-logs.*'],
-            // Pattern matches both routes so the sidebar stays highlighted
-            // on the new Log Details tab too - see report-grid/_reports-tabs.blade.php.
-            ['label' => 'Barangay Reports', 'icon' => 'bi-grid-3x3-gap-fill', 'route' => 'barangay-reports.index', 'pattern' => ['barangay-reports.*', 'barangay-log-details.*']],
-            // Follow-up round: Report Filing now has an SK side too
-            // (sk-log-details.*), same pattern as Barangay Reports above.
-            ['label' => 'SK Reports', 'icon' => 'bi-grid-3x3-gap', 'route' => 'sk-reports.index', 'pattern' => ['sk-reports.*', 'sk-log-details.*']],
-            ['label' => 'Records', 'icon' => 'bi-journal-text', 'route' => 'records.index', 'pattern' => 'records.*'],
-            ['label' => 'Analytics & Ranking', 'icon' => 'bi-graph-up', 'route' => 'analytics.index', 'pattern' => 'analytics.*'],
-            ['label' => 'Notifications', 'icon' => 'bi-bell-fill', 'route' => 'notifications.index', 'pattern' => 'notifications.*', 'badge' => true],
-        ];
-        if (auth()->user()->isAdmin()) {
-            $navItems[] = ['label' => 'Users', 'icon' => 'bi-people-fill', 'route' => 'users.index', 'pattern' => 'users.*'];
+        if (auth()->user()->isBarangay()) {
+            // Barangay accounts get a short, barangay-only menu - none of
+            // the DILG-wide pages (all barangays, analytics, users...).
+            $navItems = [
+                ['label' => 'My Dashboard', 'icon' => 'bi-speedometer2', 'route' => 'dashboard', 'pattern' => 'dashboard'],
+                ['label' => 'My Reports', 'icon' => 'bi-file-earmark-arrow-up-fill', 'route' => 'portal.reports', 'pattern' => 'portal.*'],
+                ['label' => 'Notifications', 'icon' => 'bi-bell-fill', 'route' => 'notifications.index', 'pattern' => 'notifications.*', 'badge' => true],
+                ['label' => 'My Profile', 'icon' => 'bi-person-circle', 'route' => 'profile.show', 'pattern' => 'profile.*'],
+            ];
+        } else {
+            $navItems = [
+                ['label' => 'Dashboard', 'icon' => 'bi-speedometer2', 'route' => 'dashboard', 'pattern' => 'dashboard'],
+                ['label' => 'Barangays', 'icon' => 'bi-signpost-2-fill', 'route' => 'barangays.index', 'pattern' => 'barangays.*'],
+                ['label' => 'User Logs', 'icon' => 'bi-person-lines-fill', 'route' => 'user-logs.index', 'pattern' => 'user-logs.*'],
+                // Pattern matches both routes so the sidebar stays highlighted
+                // on the new Log Details tab too - see report-grid/_reports-tabs.blade.php.
+                ['label' => 'Barangay Reports', 'icon' => 'bi-grid-3x3-gap-fill', 'route' => 'barangay-reports.index', 'pattern' => ['barangay-reports.*', 'barangay-log-details.*']],
+                // Follow-up round: Report Filing now has an SK side too
+                // (sk-log-details.*), same pattern as Barangay Reports above.
+                ['label' => 'SK Reports', 'icon' => 'bi-grid-3x3-gap', 'route' => 'sk-reports.index', 'pattern' => ['sk-reports.*', 'sk-log-details.*']],
+                ['label' => 'Records', 'icon' => 'bi-journal-text', 'route' => 'records.index', 'pattern' => 'records.*'],
+                ['label' => 'Analytics & Ranking', 'icon' => 'bi-graph-up', 'route' => 'analytics.index', 'pattern' => 'analytics.*'],
+                ['label' => 'Notifications', 'icon' => 'bi-bell-fill', 'route' => 'notifications.index', 'pattern' => 'notifications.*', 'badge' => true],
+            ];
+            if (auth()->user()->isAdmin()) {
+                $navItems[] = ['label' => 'Digital Stamping', 'icon' => 'bi-patch-check-fill', 'route' => 'digital-stamping.index', 'pattern' => 'digital-stamping.*'];
+                $navItems[] = ['label' => 'Users', 'icon' => 'bi-people-fill', 'route' => 'users.index', 'pattern' => 'users.*'];
+            }
+            $navItems[] = ['label' => 'My Profile', 'icon' => 'bi-person-circle', 'route' => 'profile.show', 'pattern' => 'profile.*'];
         }
         $activeItem = collect($navItems)->first(fn ($item) => request()->routeIs(...(array) $item['pattern']));
     @endphp
@@ -120,16 +133,23 @@
 
                 <div class="dropdown">
                     <button class="racts-user-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                        <span class="racts-avatar">{{ strtoupper(substr(auth()->user()->name, 0, 1)) }}</span>
+                        @include('profile._avatar', ['user' => auth()->user(), 'size' => 36])
                         <span class="d-none d-sm-block text-start">
                             <span class="racts-user-name d-block">{{ auth()->user()->name }}</span>
-                            <span class="racts-user-role d-block">{{ auth()->user()->roleLabel() }}</span>
+                            <span class="racts-user-role d-block">
+                                {{ auth()->user()->isBarangay() ? 'Brgy. '.auth()->user()->barangay?->barangay_name : auth()->user()->roleLabel() }}
+                            </span>
                         </span>
                         <i class="bi bi-chevron-down small text-muted"></i>
                     </button>
                     <ul class="dropdown-menu dropdown-menu-end">
                         <li><h6 class="dropdown-header">{{ auth()->user()->name }} &mdash; {{ auth()->user()->roleLabel() }}</h6></li>
                         <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a href="{{ route('profile.show') }}" class="dropdown-item">
+                                <i class="bi bi-person-circle me-1"></i> My Profile
+                            </a>
+                        </li>
                         <li>
                             <form method="POST" action="{{ route('logout') }}">
                                 @csrf
@@ -209,6 +229,27 @@
     src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
     integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
     crossorigin="anonymous"></script>
+
+<script>
+    /* Live input filters: strip characters that can never be valid while
+       the user types/pastes, so mistakes are caught before submitting.
+       The server re-checks everything (App\Rules\*) - this is only a
+       convenience. Usage: data-input-filter="name|username|text|phone". */
+    (function () {
+        const strip = {
+            name: /[^\p{L} .'\-]/gu,
+            username: /[^A-Za-z0-9._\-]/g,
+            text: /[^\p{L}\p{N} .,'"()&\/:;#%+!?\-_]/gu,
+            phone: /[^0-9+\- ()]/g,
+        };
+        document.addEventListener('input', function (e) {
+            const kind = e.target && e.target.dataset ? e.target.dataset.inputFilter : null;
+            if (!kind || !strip[kind]) return;
+            const cleaned = e.target.value.replace(strip[kind], '');
+            if (cleaned !== e.target.value) e.target.value = cleaned;
+        });
+    })();
+</script>
 
 @yield('scripts')
 </body>

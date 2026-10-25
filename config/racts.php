@@ -28,4 +28,23 @@ return [
 
     'submission_deadline_day' => 5,
 
+    /*
+    |--------------------------------------------------------------------------
+    | Digital stamp
+    |--------------------------------------------------------------------------
+    |
+    | What the DILG Administrator's stamp prints on a report (see
+    | App\Services\ReportStamper). Set these to the office's authorized
+    | wording and logo - the stamp is a visual receipt mark, not a
+    | cryptographic signature. logo is a path relative to public/
+    | (PNG/JPG), or null for a text-only stamp.
+    |
+    */
+
+    'stamp' => [
+        'office' => env('RACTS_STAMP_OFFICE', 'DILG Field Office'),
+        'label' => env('RACTS_STAMP_LABEL', 'RECEIVED BY DILG'),
+        'logo' => env('RACTS_STAMP_LOGO', 'images/dilg-logo.png'),
+    ],
+
 ];

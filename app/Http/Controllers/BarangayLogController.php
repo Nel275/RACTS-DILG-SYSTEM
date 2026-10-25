@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Rules\PlainText;
 use App\Models\AuditLog;
 use App\Models\BarangayLog;
 use App\Models\BarangayLogDetail;
+use App\Models\Notification;
 use App\Models\ReportRequirement;
+use App\Services\ReportEntryGenerator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -59,48 +62,88 @@ class BarangayLogController extends Controller
         return view('barangay-logs.show', compact('barangayLog', 'entries'));
     }
 
-    public function store(Request $request): RedirectResponse
+    /**
+     * Adds an official report requirement (admin only - see routes). A
+     * monthly/annual one immediately fills every barangay's My Reports
+     * with its current-period entries via ReportEntryGenerator.
+     */
+    public function store(Request $request, ReportEntryGenerator $generator): RedirectResponse
     {
-        $validated = $request->validate([
-            'item_description' => ['required', 'string', 'max:255'],
-            'deadline_date' => ['required', 'date'],
+        // Older callers send only a name and a one-time deadline.
+        $request->mergeIfMissing(['frequency' => BarangayLog::FREQUENCY_ONCE, 'council_type' => ReportRequirement::COUNCIL_BARANGAY, 'is_mandatory' => true]);
+
+        $validated = $request->validate($this->requirementRules() + [
+            'council_type' => ['required', Rule::in([ReportRequirement::COUNCIL_BARANGAY, ReportRequirement::COUNCIL_SK, 'both'])],
         ]);
 
-        $item = BarangayLog::create([
-            'item_description' => $validated['item_description'],
-            'deadline_date' => $validated['deadline_date'],
-            'status' => BarangayLog::STATUS_ACTIVE,
-            'date_process' => now(),
-            'processed_by' => $request->user()->name,
-        ]);
+        $councils = $validated['council_type'] === 'both'
+            ? [ReportRequirement::COUNCIL_BARANGAY, ReportRequirement::COUNCIL_SK]
+            : [$validated['council_type']];
 
-        AuditLog::record($request->user(), sprintf('Added barangay log item "%s".', $item->item_description));
+        foreach ($councils as $council) {
+            $exists = BarangayLog::forCouncil($council)
+                ->whereRaw('LOWER(item_description) = ?', [strtolower(trim($validated['item_description']))])
+                ->exists();
+            if ($exists) {
+                return back()->withInput()->withErrors([
+                    'item_description' => sprintf('A %s report named "%s" already exists - edit that one instead.',
+                        ReportRequirement::COUNCIL_TYPES[$council], $validated['item_description']),
+                ]);
+            }
+        }
 
-        return redirect()->route('barangay-log-details.index')->with('success', 'Barangay log item added.');
+        foreach ($councils as $council) {
+            $item = BarangayLog::create($this->requirementAttributes($validated) + [
+                'council_type' => $council,
+                'status' => BarangayLog::STATUS_ACTIVE,
+                'date_process' => now(),
+                'processed_by' => $request->user()->name,
+            ]);
+
+            AuditLog::record($request->user(), sprintf('Added %s report requirement "%s" (%s, %s).',
+                $item->councilLabel(), $item->item_description, $item->frequencyLabel(), $item->is_mandatory ? 'mandatory' : 'optional'));
+        }
+
+        $created = $generator->generate();
+
+        return redirect()->route($this->filingIndexRouteFor($item))->with('success', $created > 0
+            ? "Report requirement added. {$created} My Reports entries were created."
+            : 'Report requirement added.');
     }
 
-    public function update(Request $request, BarangayLog $barangayLog): RedirectResponse
+    public function update(Request $request, BarangayLog $barangayLog, ReportEntryGenerator $generator): RedirectResponse
     {
-        $validated = $request->validate([
-            'item_description' => ['required', 'string', 'max:255'],
-            'deadline_date' => ['required', 'date'],
+        $request->mergeIfMissing($barangayLog->only(['frequency', 'deadline_day', 'deadline_month', 'is_mandatory'])
+            + ['effective_from' => $barangayLog->effective_from?->toDateString()]);
+
+        $validated = $request->validate($this->requirementRules() + [
             'status' => ['required', Rule::in(array_keys(BarangayLog::STATUSES))],
         ]);
 
-        $barangayLog->update([
-            'item_description' => $validated['item_description'],
-            'deadline_date' => $validated['deadline_date'],
+        // Only the requirement itself changes - entries already generated
+        // keep their own name snapshot and deadline (history is preserved).
+        $barangayLog->update($this->requirementAttributes($validated) + [
             'status' => $validated['status'],
             'date_process' => now(),
             'processed_by' => $request->user()->name,
         ]);
 
-        AuditLog::record($request->user(), sprintf('Updated barangay log item "%s".', $barangayLog->item_description));
+        AuditLog::record($request->user(), sprintf('Updated %s report requirement "%s" (%s, deadline: %s).',
+            $barangayLog->councilLabel(), $barangayLog->item_description, $barangayLog->frequencyLabel(), $barangayLog->deadlineRuleLabel()));
 
-        return redirect()->route($this->filingIndexRouteFor($barangayLog))->with('success', 'Barangay log item updated.');
+        if ($barangayLog->isRecurring() && $barangayLog->wasChanged(['item_description', 'frequency', 'deadline_day', 'deadline_month', 'effective_from', 'is_mandatory'])) {
+            Notification::notifyBarangay(null, Notification::TYPE_REQUIREMENT_CHANGED, sprintf(
+                'DILG updated the %s report requirement "%s": %s, due %s. Reports already listed keep their deadlines.',
+                $barangayLog->councilLabel(), $barangayLog->item_description, $barangayLog->frequencyLabel(), lcfirst($barangayLog->deadlineRuleLabel())
+            ));
+        }
+
+        $generator->generate();
+
+        return redirect()->route($this->filingIndexRouteFor($barangayLog))->with('success', 'Report requirement updated.');
     }
 
-    public function toggle(Request $request, BarangayLog $barangayLog): RedirectResponse
+    public function toggle(Request $request, BarangayLog $barangayLog, ReportEntryGenerator $generator): RedirectResponse
     {
         $barangayLog->update([
             'status' => $barangayLog->isActive() ? BarangayLog::STATUS_INACTIVE : BarangayLog::STATUS_ACTIVE,
@@ -114,10 +157,47 @@ class BarangayLogController extends Controller
             $barangayLog->item_description
         ));
 
+        if ($barangayLog->isActive()) {
+            $generator->generate();
+        }
+
         return redirect()->route($this->filingIndexRouteFor($barangayLog))->with(
             'success',
             $barangayLog->isActive() ? 'Log item reactivated.' : 'Log item deactivated.'
         );
+    }
+
+    /** @return array<string, mixed> */
+    private function requirementRules(): array
+    {
+        return [
+            'item_description' => ['required', 'string', 'max:255', new PlainText],
+            'frequency' => ['required', Rule::in(array_keys(BarangayLog::FREQUENCIES))],
+            'deadline_date' => ['nullable', 'required_if:frequency,once', 'date'],
+            'deadline_day' => ['nullable', 'required_unless:frequency,once', 'integer', 'between:1,28'],
+            'deadline_month' => ['nullable', 'required_if:frequency,annual', 'integer', 'between:1,12'],
+            'effective_from' => ['nullable', 'date'], // back-fill is capped by ReportEntryGenerator::MAX_MONTHS_BACK
+            'is_mandatory' => ['nullable', 'boolean'],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     * @return array<string, mixed>
+     */
+    private function requirementAttributes(array $validated): array
+    {
+        $recurring = $validated['frequency'] !== BarangayLog::FREQUENCY_ONCE;
+
+        return [
+            'item_description' => trim($validated['item_description']),
+            'frequency' => $validated['frequency'],
+            'deadline_date' => $recurring ? null : $validated['deadline_date'],
+            'deadline_day' => $recurring ? (int) $validated['deadline_day'] : null,
+            'deadline_month' => $validated['frequency'] === BarangayLog::FREQUENCY_ANNUAL ? (int) $validated['deadline_month'] : null,
+            'effective_from' => $recurring ? ($validated['effective_from'] ?? now()->toDateString()) : null,
+            'is_mandatory' => (bool) ($validated['is_mandatory'] ?? false),
+        ];
     }
 
     private function filingIndexRouteFor(BarangayLog $barangayLog): string

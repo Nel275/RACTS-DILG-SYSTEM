@@ -36,7 +36,26 @@ class Notification extends Model
 
     public const TYPE_LATE_SUBMISSION = 'late_submission';
 
+    // My Reports (Report Filing) events - keyed by barangay_log_detail_id.
+    public const TYPE_REPORT_ASSIGNED = 'report_assigned';
+
+    public const TYPE_REPORT_DUE_SOON = 'report_due_soon';
+
+    public const TYPE_REPORT_OVERDUE = 'report_overdue';
+
+    public const TYPE_REPORT_RECEIVED = 'report_received';
+
+    public const TYPE_REPORT_RETURNED = 'report_returned';
+
+    public const TYPE_REQUIREMENT_CHANGED = 'requirement_changed';
+
     public const TYPES = [
+        self::TYPE_REPORT_ASSIGNED => 'New Report Required',
+        self::TYPE_REPORT_DUE_SOON => 'Report Due Soon',
+        self::TYPE_REPORT_OVERDUE => 'Report Overdue',
+        self::TYPE_REPORT_RECEIVED => 'Report Received',
+        self::TYPE_REPORT_RETURNED => 'Report Returned for Revision',
+        self::TYPE_REQUIREMENT_CHANGED => 'Report Requirement Changed',
         self::TYPE_PERIOD_OPEN => 'Submission Period Open',
         self::TYPE_DEADLINE_TODAY => 'Submission Deadline Today',
         self::TYPE_REPORT_LATE => 'Late Report Submission',
@@ -55,6 +74,7 @@ class Notification extends Model
         'barangay_id',
         'requirement_id',
         'period',
+        'barangay_log_detail_id',
         'message',
         'notification_date',
         'is_read',
@@ -123,6 +143,38 @@ class Notification extends Model
 
         return app(\App\Services\ReportDeadlineService::class)
             ->deadlineFor($this->period, $this->reportRequirement->frequency);
+    }
+
+    /**
+     * Notifies the active barangay accounts of one barangay (or of every
+     * barangay when $barangayId is null). With $once, users already sent
+     * this type for this entry - even if they cleared it (withTrashed) -
+     * are skipped, so repeated scheduler runs never duplicate a reminder.
+     */
+    public static function notifyBarangay(?int $barangayId, string $type, string $message, ?BarangayLogDetail $entry = null, bool $once = false): int
+    {
+        $users = User::where('role', User::ROLE_BARANGAY)
+            ->where('is_active', true)
+            ->when($barangayId, fn ($q) => $q->where('barangay_id', $barangayId))
+            ->when($once && $entry, fn ($q) => $q->whereNotIn('id', self::withTrashed()
+                ->where('type', $type)->where('barangay_log_detail_id', $entry->id)->select('user_id')))
+            ->get();
+
+        foreach ($users as $user) {
+            self::create([
+                'user_id' => $user->id,
+                'type' => $type,
+                'barangay_id' => $user->barangay_id,
+                'barangay_log_detail_id' => $entry?->id,
+                'period' => $entry?->period,
+                'message' => $message,
+                'notification_date' => now(),
+                'is_read' => false,
+                'auto_generated' => true,
+            ]);
+        }
+
+        return $users->count();
     }
 
     public function typeLabel(): string

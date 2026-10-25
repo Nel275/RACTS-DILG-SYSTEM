@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
 /**
  * Follow-up round: the catalog of trackable report/document "items" a
@@ -38,10 +39,25 @@ class BarangayLog extends Model
         self::STATUS_INACTIVE => 'Inactive',
     ];
 
+    public const FREQUENCY_ONCE = 'once';
+    public const FREQUENCY_MONTHLY = 'monthly';
+    public const FREQUENCY_ANNUAL = 'annual';
+
+    public const FREQUENCIES = [
+        self::FREQUENCY_ONCE => 'One-time',
+        self::FREQUENCY_MONTHLY => 'Monthly',
+        self::FREQUENCY_ANNUAL => 'Annual',
+    ];
+
     protected $fillable = [
         'item_description',
         'council_type',
+        'frequency',
         'deadline_date',
+        'deadline_day',
+        'deadline_month',
+        'effective_from',
+        'is_mandatory',
         'status',
         'date_process',
         'processed_by',
@@ -62,6 +78,8 @@ class BarangayLog extends Model
         return [
             'deadline_date' => 'date:Y-m-d',
             'date_process' => 'date:Y-m-d',
+            'effective_from' => 'date:Y-m-d',
+            'is_mandatory' => 'boolean',
         ];
     }
 
@@ -88,5 +106,40 @@ class BarangayLog extends Model
     public function isActive(): bool
     {
         return $this->status === self::STATUS_ACTIVE;
+    }
+
+    public function isRecurring(): bool
+    {
+        return in_array($this->frequency, [self::FREQUENCY_MONTHLY, self::FREQUENCY_ANNUAL], true);
+    }
+
+    public function frequencyLabel(): string
+    {
+        return self::FREQUENCIES[$this->frequency] ?? self::FREQUENCIES[self::FREQUENCY_ONCE];
+    }
+
+    /**
+     * Deadline for one reporting period: a monthly report for "2026-10"
+     * is due on deadline_day of November 2026; an annual report for
+     * "2026" is due on deadline_month/deadline_day of 2027.
+     */
+    public function deadlineFor(string $period): Carbon
+    {
+        $next = $this->frequency === self::FREQUENCY_MONTHLY
+            ? Carbon::createFromFormat('!Y-m', $period)->addMonthNoOverflow()
+            : Carbon::create((int) $period + 1, $this->deadline_month ?? 1, 1);
+
+        return $next->day(min($this->deadline_day ?? 5, $next->daysInMonth));
+    }
+
+    /** Human description of the deadline rule, for the admin catalog. */
+    public function deadlineRuleLabel(): string
+    {
+        return match ($this->frequency) {
+            self::FREQUENCY_MONTHLY => sprintf('Day %d of the following month', $this->deadline_day ?? 5),
+            self::FREQUENCY_ANNUAL => sprintf('%s %d of the following year',
+                Carbon::create(2000, $this->deadline_month ?? 1, 1)->format('F'), $this->deadline_day ?? 5),
+            default => $this->deadline_date?->format('M j, Y') ?? '—',
+        };
     }
 }

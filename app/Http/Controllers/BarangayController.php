@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Rules\NoInappropriateWords;
 use App\Models\AuditLog;
 use App\Models\Barangay;
 use Illuminate\Http\RedirectResponse;
@@ -182,7 +183,7 @@ class BarangayController extends Controller
                 'required', 'string', 'max:255',
                 // Letters (including Ñ and other accented letters), spaces,
                 // periods and hyphens only - and at least one letter.
-                'regex:/^(?=.*\pL)[\pL .\-]+$/u',
+                'regex:/^(?=.*\pL)[\pL .\-]+$/u', new NoInappropriateWords,
                 Rule::unique('barangays', 'barangay_name')->ignore($barangay?->id),
             ],
             'status' => ['required', Rule::in(array_keys(Barangay::STATUSES))],

@@ -8,6 +8,7 @@ use App\Models\ReportRecord;
 use App\Models\ReportRequirement;
 use App\Services\RankingCalculator;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class DashboardController extends Controller
@@ -25,8 +26,14 @@ class DashboardController extends Controller
      * reports are in vs. still pending, so staff can see progress
      * mid-cycle before the period closes.
      */
-    public function index(): View
+    public function index(Request $request): View
     {
+        // Barangay accounts are classified to their own barangay by their
+        // login and get a barangay-only dashboard, never the DILG-wide one.
+        if ($request->user()->isBarangay()) {
+            return app(BarangayPortalController::class)->dashboard($request);
+        }
+
         $totalBarangays = Barangay::where('status', Barangay::STATUS_ACTIVE)->count();
         $totalReportSlots = ReportRequirement::active()->count();
 

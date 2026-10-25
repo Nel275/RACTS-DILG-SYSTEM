@@ -249,7 +249,7 @@
                                value="{{ old('item_description') }}">
                         <datalist id="add-log-detail-report-options-{{ $councilType }}">
                             @foreach ($activeLogItems as $option)
-                                <option value="{{ $option->item_description }}" data-deadline="{{ $option->deadline_date->format('Y-m-d') }}"></option>
+                                <option value="{{ $option->item_description }}" data-deadline="{{ $option->deadline_date?->format('Y-m-d') }}"></option>
                             @endforeach
                         </datalist>
                     </div>
@@ -265,55 +265,126 @@
         </div>
     </div>
 
-    {{-- Follow-up round: the Barangay Logs catalog used to be its own
-         top-level page. It's now managed right here instead, mirroring
-         the "Manage Report Slots" panel on the Barangay/SK Reports
-         grids - one less page to navigate to for something that's
-         only ever edited alongside these entries. $reportOptions is
-         the full, unfiltered catalog list already built by
-         BarangayLogDetailController@listFor for the filter dropdown
-         above, already scoped to this council, so no extra controller
-         work was needed for this. --}}
+    {{-- Official report requirements (admin only). Monthly/annual ones
+         are turned into every barangay's My Reports entries automatically
+         by ReportEntryGenerator (on save and daily via the scheduler);
+         one-time ones work as before, through Add Log Entry above.
+         Editing a requirement never rewrites entries already generated. --}}
     <div class="card shadow-sm mt-3">
         <div class="card-body">
             <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#report-catalog-manager-{{ $councilType }}">
-                <i class="bi bi-gear"></i> Manage Reports
+                <i class="bi bi-gear"></i> Manage Report Requirements
             </button>
 
-            <div class="collapse mt-3" id="report-catalog-manager-{{ $councilType }}">
+            <div class="collapse mt-3 {{ $errors->hasAny(['frequency', 'deadline_day', 'deadline_month', 'effective_from', 'council_type']) ? 'show' : '' }}" id="report-catalog-manager-{{ $councilType }}">
+                <h2 class="h6">Add Requirement</h2>
+                <form method="POST" action="{{ route('barangay-logs.store') }}" class="row g-2 align-items-end mb-4">
+                    @csrf
+                    <div class="col-md-3">
+                        <label class="form-label small mb-1">Report Name</label>
+                        <input type="text" name="item_description" maxlength="255" class="form-control form-control-sm" required>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label small mb-1">For</label>
+                        <select name="council_type" class="form-select form-select-sm">
+                            <option value="{{ $councilType }}">{{ $councilLabel }} only</option>
+                            <option value="both">Barangay and SK</option>
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label small mb-1">Frequency</label>
+                        <select name="frequency" class="form-select form-select-sm">
+                            @foreach (\App\Models\BarangayLog::FREQUENCIES as $value => $label)
+                                <option value="{{ $value }}" @selected($value === 'monthly')>{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-4 col-md-1">
+                        <label class="form-label small mb-1" title="Day of the following month (monthly) or of the deadline month (annual)">Due Day</label>
+                        <input type="number" name="deadline_day" min="1" max="28" value="5" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-4 col-md-1">
+                        <label class="form-label small mb-1" title="Annual only: month of the following year">Due Month</label>
+                        <input type="number" name="deadline_month" min="1" max="12" value="1" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-4 col-md-2">
+                        <label class="form-label small mb-1">One-time Deadline</label>
+                        <input type="date" name="deadline_date" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label small mb-1">Effective From</label>
+                        <input type="date" name="effective_from" value="{{ now()->toDateString() }}" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <div class="form-check">
+                            <input type="hidden" name="is_mandatory" value="0">
+                            <input type="checkbox" name="is_mandatory" value="1" class="form-check-input" id="new-mandatory-{{ $councilType }}" checked>
+                            <label class="form-check-label small" for="new-mandatory-{{ $councilType }}">Mandatory</label>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary btn-sm w-100">Add Requirement</button>
+                    </div>
+                    <div class="col-12 form-text">
+                        Monthly: due on "Due Day" of the following month. Annual: due on "Due Month"/"Due Day" of the
+                        following year. One-time: due on the date given. Changes apply to new periods only.
+                    </div>
+                </form>
+
                 <div class="table-responsive mb-3">
                     <table class="table table-sm align-middle">
                         <thead>
                             <tr>
                                 <th>Report Name</th>
-                                <th>Deadline</th>
+                                <th>Frequency</th>
+                                <th>Due Day / Month / Date</th>
+                                <th>Effective From</th>
+                                <th>Mandatory</th>
                                 <th>Status</th>
                                 <th class="text-end">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             @forelse ($reportOptions as $item)
+                                @php($form = 'report-item-edit-'.$item->id)
                                 <tr>
-                                    <td style="min-width: 220px;">
-                                        <input type="text" form="report-item-edit-{{ $item->id }}" name="item_description" value="{{ $item->item_description }}" class="form-control form-control-sm">
+                                    <td style="min-width: 200px;">
+                                        <input type="text" form="{{ $form }}" name="item_description" value="{{ $item->item_description }}" class="form-control form-control-sm" aria-label="Report name">
                                     </td>
                                     <td>
-                                        <input type="date" form="report-item-edit-{{ $item->id }}" name="deadline_date" value="{{ $item->deadline_date->format('Y-m-d') }}" class="form-control form-control-sm">
+                                        <select form="{{ $form }}" name="frequency" class="form-select form-select-sm" aria-label="Frequency">
+                                            @foreach (\App\Models\BarangayLog::FREQUENCIES as $value => $label)
+                                                <option value="{{ $value }}" @selected($item->frequency === $value)>{{ $label }}</option>
+                                            @endforeach
+                                        </select>
+                                    </td>
+                                    <td class="text-nowrap">
+                                        <input type="number" form="{{ $form }}" name="deadline_day" min="1" max="28" value="{{ $item->deadline_day ?? 5 }}" class="form-control form-control-sm d-inline-block" style="width: 4.5rem;" aria-label="Due day">
+                                        <input type="number" form="{{ $form }}" name="deadline_month" min="1" max="12" value="{{ $item->deadline_month ?? 1 }}" class="form-control form-control-sm d-inline-block" style="width: 4.5rem;" aria-label="Due month">
+                                        <input type="date" form="{{ $form }}" name="deadline_date" value="{{ $item->deadline_date?->format('Y-m-d') }}" class="form-control form-control-sm d-inline-block" style="width: 9.5rem;" aria-label="One-time deadline">
+                                        <div class="small text-muted">{{ $item->deadlineRuleLabel() }}</div>
+                                    </td>
+                                    <td>
+                                        <input type="date" form="{{ $form }}" name="effective_from" value="{{ $item->effective_from?->format('Y-m-d') }}" class="form-control form-control-sm" aria-label="Effective from">
+                                    </td>
+                                    <td class="text-center">
+                                        <input type="hidden" form="{{ $form }}" name="is_mandatory" value="0">
+                                        <input type="checkbox" form="{{ $form }}" name="is_mandatory" value="1" class="form-check-input" @checked($item->is_mandatory) aria-label="Mandatory">
                                     </td>
                                     <td>
                                         <span class="badge {{ $item->isActive() ? 'bg-success' : 'bg-secondary' }}">
                                             {{ $item->statusLabel() }}
                                         </span>
-                                        <input type="hidden" form="report-item-edit-{{ $item->id }}" name="status" value="{{ $item->status }}">
+                                        <input type="hidden" form="{{ $form }}" name="status" value="{{ $item->status }}">
                                     </td>
-                                    <td class="text-end">
-                                        <form id="report-item-edit-{{ $item->id }}" method="POST" action="{{ route('barangay-logs.update', $item) }}" class="d-inline">
+                                    <td class="text-end text-nowrap">
+                                        <form id="{{ $form }}" method="POST" action="{{ route('barangay-logs.update', $item) }}" class="d-inline">
                                             @csrf
                                             @method('PUT')
                                             <button type="submit" class="btn btn-outline-primary btn-sm">Save</button>
                                         </form>
                                         <form method="POST" action="{{ route('barangay-logs.toggle', $item) }}" class="d-inline"
-                                              onsubmit="return confirm('{{ $item->isActive() ? 'Deactivate' : 'Reactivate' }} &quot;{{ $item->item_description }}&quot;?');">
+                                              onsubmit="return confirm({{ \Illuminate\Support\Js::from(($item->isActive() ? 'Deactivate' : 'Reactivate').' "'.$item->item_description.'"?') }});">
                                             @csrf
                                             @method('PATCH')
                                             <button type="submit" class="btn btn-outline-secondary btn-sm">
@@ -324,7 +395,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="4" class="text-muted">No report items yet.</td>
+                                    <td colspan="7" class="text-muted">No report requirements yet.</td>
                                 </tr>
                             @endforelse
                         </tbody>
@@ -332,8 +403,7 @@
                 </div>
 
                 <p class="text-muted small mb-0">
-                    New reports aren't added here anymore - type a new report's name directly
-                    in "Add Log Entry" above and it's added to this catalog automatically.
+                    Click a report's name in the list above to see every barangay's entry and progress for it.
                 </p>
             </div>
         </div>

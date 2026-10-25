@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -32,6 +33,8 @@ class BarangayLogDetail extends Model
     public const STATUS_LATE = 'late';
     public const STATUS_MISSED = 'missed';
     public const STATUS_CLOSED = 'closed';
+    public const STATUS_RETURNED = 'returned';
+    public const STATUS_ACCEPTED = 'accepted';
 
     public const STATUSES = [
         self::STATUS_PENDING => 'Pending',
@@ -39,7 +42,15 @@ class BarangayLogDetail extends Model
         self::STATUS_LATE => 'Submitted Late',
         self::STATUS_MISSED => 'Missed',
         self::STATUS_CLOSED => 'Closed',
+        self::STATUS_RETURNED => 'Returned for Revision',
+        self::STATUS_ACCEPTED => 'Accepted',
     ];
+
+    /** Statuses that mean "a submission is with DILG". */
+    public const SUBMITTED_STATUSES = [self::STATUS_SUBMITTED, self::STATUS_LATE, self::STATUS_CLOSED, self::STATUS_ACCEPTED];
+
+    /** Statuses a barangay may (re)submit from. */
+    public const OPEN_STATUSES = [self::STATUS_PENDING, self::STATUS_MISSED, self::STATUS_RETURNED];
 
     /**
      * Maps a status to one of the existing racts-badge-* classes
@@ -56,21 +67,32 @@ class BarangayLogDetail extends Model
         self::STATUS_LATE => 'racts-badge-yellow',
         self::STATUS_MISSED => 'racts-badge-red',
         self::STATUS_CLOSED => 'bg-dark-subtle text-dark-emphasis',
+        self::STATUS_RETURNED => 'bg-warning-subtle text-warning-emphasis',
+        self::STATUS_ACCEPTED => 'bg-success text-white',
     ];
 
     protected $fillable = [
         'barangay_log_id',
         'barangay_id',
         'item_description',
+        'period',
         'deadline_date',
         'date_submitted',
         'status',
+        'submission_count',
+        'review_remarks',
+        'reviewed_by',
+        'reviewed_at',
         'date_process',
         'processed_by',
         'report_file_path',
         'report_original_name',
+        'report_file_hash',
         'report_filed_at',
     ];
+
+    /** File types ReportStamper can stamp (by original extension). */
+    public const STAMPABLE_EXTENSIONS = ['pdf', 'docx'];
 
     /**
      * Follow-up round: 'date' (with no explicit format) saves using the
@@ -93,6 +115,7 @@ class BarangayLogDetail extends Model
             'date_submitted' => 'datetime',
             'date_process' => 'date:Y-m-d',
             'report_filed_at' => 'datetime',
+            'reviewed_at' => 'datetime',
         ];
     }
 
@@ -104,6 +127,75 @@ class BarangayLogDetail extends Model
     public function barangayLog()
     {
         return $this->belongsTo(BarangayLog::class);
+    }
+
+    public function stamps()
+    {
+        return $this->hasMany(ReportStamp::class)->latest('id');
+    }
+
+    /** RACTS-000012 - the report reference number printed on stamps. */
+    public function referenceNumber(): string
+    {
+        return sprintf('RACTS-%06d', $this->id);
+    }
+
+    /**
+     * Submitted to DILG: a submission was recorded (on time or late),
+     * including entries closed after submission.
+     */
+    public function isSubmittedToDilg(): bool
+    {
+        return $this->date_submitted !== null && in_array($this->status, self::SUBMITTED_STATUSES, true);
+    }
+
+    public function isOpenForSubmission(): bool
+    {
+        return in_array($this->status, self::OPEN_STATUSES, true);
+    }
+
+    /** Submitted again after an earlier submission (e.g. after being returned). */
+    public function isResubmission(): bool
+    {
+        return $this->submission_count > 1;
+    }
+
+    /** "October 2026", "2026", or null for one-time entries. */
+    public function periodLabel(): ?string
+    {
+        return match (strlen((string) $this->period)) {
+            7 => Carbon::createFromFormat('!Y-m', $this->period)->format('F Y'),
+            4 => $this->period,
+            default => null,
+        };
+    }
+
+    public function isStampable(): bool
+    {
+        return in_array(strtolower(pathinfo($this->report_original_name ?? '', PATHINFO_EXTENSION)), self::STAMPABLE_EXTENSIONS, true);
+    }
+
+    /**
+     * The stamp covering the file this entry carries right now, if any.
+     * A resubmitted file has a new hash, so older stamps stop matching.
+     */
+    public function currentStamp(): ?ReportStamp
+    {
+        return $this->report_file_hash === null
+            ? null
+            : $this->stamps->firstWhere('original_file_hash', $this->report_file_hash);
+    }
+
+    /** Stamping status, kept separate from the submission status above. */
+    public function stampingStatusLabel(): string
+    {
+        return match (true) {
+            ! $this->isSubmittedToDilg() || ! $this->hasReportFile() => 'Not submitted',
+            $this->currentStamp() !== null => 'Stamped',
+            ! $this->isStampable() => 'Cannot be stamped',
+            $this->stamps->isNotEmpty() => 'Resubmitted - awaiting new stamp',
+            default => 'Awaiting stamp',
+        };
     }
 
     public function statusLabel(): string
@@ -137,11 +229,13 @@ class BarangayLogDetail extends Model
             'status' => $isLate ? self::STATUS_LATE : self::STATUS_SUBMITTED,
             'date_process' => now(),
             'processed_by' => $processedBy,
+            'submission_count' => $this->submission_count + 1,
         ];
 
         if ($reportFilePath !== null) {
             $attributes['report_file_path'] = $reportFilePath;
             $attributes['report_original_name'] = $reportOriginalName;
+            $attributes['report_file_hash'] = hash_file('sha256', Storage::disk('local')->path($reportFilePath));
             // A freshly (re-)uploaded file replaces whatever was staged
             // or filed before, so it needs to be filed again.
             $attributes['report_filed_at'] = null;
@@ -200,6 +294,27 @@ class BarangayLogDetail extends Model
     public function incomingFolder(): string
     {
         return Barangay::incomingPath($this->councilFolder(), $this->barangay->folderName());
+    }
+
+    /** DILG review: send back to the barangay with feedback. */
+    public function returnForRevision(string $remarks, string $reviewer): void
+    {
+        $this->update([
+            'status' => self::STATUS_RETURNED,
+            'review_remarks' => $remarks,
+            'reviewed_by' => $reviewer,
+            'reviewed_at' => now(),
+        ]);
+    }
+
+    public function accept(string $reviewer, ?string $remarks = null): void
+    {
+        $this->update([
+            'status' => self::STATUS_ACCEPTED,
+            'review_remarks' => $remarks,
+            'reviewed_by' => $reviewer,
+            'reviewed_at' => now(),
+        ]);
     }
 
     public function close(string $processedBy): void

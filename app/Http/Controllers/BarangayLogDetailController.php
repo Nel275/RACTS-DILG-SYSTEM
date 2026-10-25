@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Rules\PlainText;
 use App\Models\AuditLog;
 use App\Models\Barangay;
 use App\Models\BarangayLog;
 use App\Models\BarangayLogDetail;
+use App\Models\Notification;
 use App\Models\ReportRequirement;
+use App\Rules\NoInappropriateWords;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -122,7 +125,7 @@ class BarangayLogDetailController extends Controller
     {
         $validated = $request->validate([
             'barangay_id' => ['required', 'exists:barangays,id'],
-            'item_description' => ['required', 'string', 'max:255'],
+            'item_description' => ['required', 'string', 'max:255', new PlainText],
             'deadline_date' => ['required', 'date'],
         ]);
 
@@ -342,6 +345,47 @@ class BarangayLogDetailController extends Controller
         ));
 
         return back()->with('success', 'Log entry closed.');
+    }
+
+    /**
+     * DILG review (admin only): send a submitted report back to the
+     * barangay with feedback. The barangay can then resubmit it from My
+     * Reports; the earlier file and any stamp stay in the history.
+     */
+    public function returnForRevision(Request $request, BarangayLogDetail $barangayLogDetail): RedirectResponse
+    {
+        abort_unless($barangayLogDetail->isSubmittedToDilg() && $barangayLogDetail->status !== BarangayLogDetail::STATUS_CLOSED, 422, 'Only a submitted report can be returned.');
+
+        $validated = $request->validate([
+            'review_remarks' => ['required', 'string', 'max:1000', new NoInappropriateWords],
+        ]);
+
+        $barangayLogDetail->returnForRevision(trim($validated['review_remarks']), $request->user()->name);
+
+        Notification::notifyBarangay($barangayLogDetail->barangay_id, Notification::TYPE_REPORT_RETURNED, sprintf(
+            'DILG returned "%s" for revision: %s', $barangayLogDetail->item_description, $barangayLogDetail->review_remarks
+        ), $barangayLogDetail);
+
+        AuditLog::record($request->user(), sprintf('Returned report "%s" (%s) for revision.',
+            $barangayLogDetail->item_description, $barangayLogDetail->barangay->barangay_name));
+
+        return back()->with('success', 'Report returned to the barangay for revision.');
+    }
+
+    public function accept(Request $request, BarangayLogDetail $barangayLogDetail): RedirectResponse
+    {
+        abort_unless($barangayLogDetail->isSubmittedToDilg() && $barangayLogDetail->status !== BarangayLogDetail::STATUS_CLOSED, 422, 'Only a submitted report can be accepted.');
+
+        $validated = $request->validate([
+            'review_remarks' => ['nullable', 'string', 'max:1000', new NoInappropriateWords],
+        ]);
+
+        $barangayLogDetail->accept($request->user()->name, $validated['review_remarks'] ?? null);
+
+        AuditLog::record($request->user(), sprintf('Accepted report "%s" (%s).',
+            $barangayLogDetail->item_description, $barangayLogDetail->barangay->barangay_name));
+
+        return back()->with('success', 'Report accepted.');
     }
 
     public function destroy(Request $request, BarangayLogDetail $barangayLogDetail): RedirectResponse

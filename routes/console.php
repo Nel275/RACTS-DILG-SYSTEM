@@ -25,3 +25,10 @@ Artisan::command('inspire', function () {
 |
 */
 Schedule::command('racts:check-late-submissions')->dailyAt('01:00');
+
+// My Reports automation: creates each new month's/year's report entries
+// from the DILG's recurring requirements and sends due-soon/overdue
+// reminders. Idempotent, so running it more than once a day is harmless;
+// withoutOverlapping() keeps two runs from racing each other. Needs the
+// same `php artisan schedule:run` timer as the command above.
+Schedule::command('racts:sync-report-entries')->dailyAt('00:30')->withoutOverlapping();

@@ -4,9 +4,12 @@ use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BarangayController;
+use App\Http\Controllers\BarangayPortalController;
+use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\BarangayLogController;
 use App\Http\Controllers\BarangayLogDetailController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DigitalStampingController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\RecordsController;
 use App\Http\Controllers\FileSyncController;
@@ -52,8 +55,26 @@ Route::middleware('guest')->group(function () {
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
-    // Dashboard - real summary view, available to both roles.
+    // Dashboard - real summary view for every role; barangay accounts get
+    // their own personalized one (see DashboardController::index).
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
+    // Profile - every account type edits its own profile/password. The
+    // avatar route serves the photo of whichever user is asked for to any
+    // signed-in user (it appears next to names in activity feeds).
+    Route::get('/profile', [ProfileController::class, 'show'])->name('profile.show');
+    Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password');
+    Route::get('/profile/avatar/{user}', [ProfileController::class, 'avatar'])->name('profile.avatar');
+
+    // Barangay portal - barangay accounts only. Every query inside is
+    // scoped to the signed-in user's own barangay (see the controller).
+    Route::middleware('role:barangay')->prefix('my-reports')->name('portal.')->group(function () {
+        Route::get('/', [BarangayPortalController::class, 'reports'])->name('reports');
+        Route::patch('/{barangayLogDetail}/submit', [BarangayPortalController::class, 'submit'])->name('submit');
+        Route::get('/{barangayLogDetail}/file', [BarangayPortalController::class, 'viewFile'])->name('view-file');
+        Route::get('/{barangayLogDetail}/stamped', [BarangayPortalController::class, 'stampedFile'])->name('stamped-file');
+    });
 
     // Clears the dashboard's recent-activity feed (audit_logs) only -
     // never touches an actual recorded report. Admin-only, matching
@@ -70,6 +91,20 @@ Route::middleware('auth')->group(function () {
     Route::middleware('role:admin,staff')
         ->get('/activity-logs', [ActivityLogController::class, 'index'])
         ->name('activity-logs.index');
+
+    // Digital Stamping - DILG Administrator only. Stamps reports already
+    // submitted to DILG; the stamped copy is a separate file, the original
+    // upload is never changed (see App\Services\ReportStamper).
+    Route::middleware('role:admin')->prefix('digital-stamping')->name('digital-stamping.')->group(function () {
+        Route::get('/', [DigitalStampingController::class, 'index'])->name('index');
+        Route::get('/stamps/{reportStamp}/download', [DigitalStampingController::class, 'download'])->name('download');
+        Route::post('/{barangayLogDetail}/stamp', [DigitalStampingController::class, 'stamp'])->name('stamp');
+        Route::get('/{barangayLogDetail}', [DigitalStampingController::class, 'show'])->name('show');
+    });
+
+    // Stamp verification - any signed-in account can check a code printed
+    // on a stamped report; answers come from server records only.
+    Route::get('/verify-stamp', [DigitalStampingController::class, 'verify'])->name('verify-stamp');
 
     // User account management - DILG Administrator only
     Route::middleware('role:admin')->group(function () {
@@ -143,6 +178,13 @@ Route::middleware('auth')->group(function () {
             ->middleware('role:admin')->name('store');
         Route::patch('/{barangayLogDetail}/submit', [BarangayLogDetailController::class, 'markSubmitted'])
             ->middleware('role:admin,staff')->name('submit');
+
+        // DILG review - administrator only: return a submitted report to
+        // the barangay with feedback, or accept it.
+        Route::patch('/{barangayLogDetail}/return', [BarangayLogDetailController::class, 'returnForRevision'])
+            ->middleware('role:admin')->name('return');
+        Route::patch('/{barangayLogDetail}/accept', [BarangayLogDetailController::class, 'accept'])
+            ->middleware('role:admin')->name('accept');
 
         // Follow-up round: opens/downloads the attached file itself
         // (whatever report_file_path currently points to - staged or
@@ -244,7 +286,7 @@ Route::middleware('auth')->group(function () {
 
     // Notification Management - every logged-in user sees only their own
     // notifications, regardless of role.
-    Route::middleware('role:admin,staff')->prefix('notifications')->name('notifications.')->group(function () {
+    Route::middleware('role:admin,staff,barangay')->prefix('notifications')->name('notifications.')->group(function () {
         Route::get('/', [NotificationController::class, 'index'])->name('index');
         Route::patch('/{notification}/read', [NotificationController::class, 'markRead'])->name('read');
         Route::post('/mark-all-read', [NotificationController::class, 'markAllRead'])->name('read-all');

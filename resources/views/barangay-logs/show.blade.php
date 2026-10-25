@@ -18,7 +18,7 @@
         <div>
             <h1 class="h4 mb-1">{{ $barangayLog->item_description }}</h1>
             <p class="text-muted mb-0">
-                Deadline: {{ $barangayLog->deadline_date->format('F j, Y') }}
+                {{ $barangayLog->frequencyLabel() }} &middot; Deadline: {{ $barangayLog->deadlineRuleLabel() }}
                 &mdash; {{ $entries->count() }} {{ $entries->count() === 1 ? 'barangay' : 'barangays' }} logged with this report.
             </p>
         </div>
